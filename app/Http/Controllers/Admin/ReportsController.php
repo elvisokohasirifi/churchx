@@ -8,8 +8,12 @@ use App\Models\Branch;
 use App\Models\Member;
 use App\PermissionCode;
 use App\Services\BranchAccessService;
+use App\Services\ChurchContext;
 use App\Services\FinanceReportService;
+use App\Services\OperationalReportService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class ReportsController extends Controller
@@ -41,5 +45,90 @@ class ReportsController extends Controller
         $ids = $access->accessibleBranchIds(backpack_user(), PermissionCode::MembersView);
 
         return view('admin.reports.members', ['counts' => Member::query()->selectRaw('membership_status, count(*) as total')->whereHas('branchHistory', fn ($query) => $query->whereIn('branch_id', $ids)->where('is_primary', true)->whereNull('left_date'))->groupBy('membership_status')->pluck('total', 'membership_status')]);
+    }
+
+    public function attendanceRecords(Request $request, OperationalReportService $reports, BranchAccessService $access): View
+    {
+        [$branchIds, $branches, $branchId, $from, $to] = $this->filters($request, $access, PermissionCode::AttendanceView);
+
+        return view('admin.reports.attendance-records', [
+            'rows' => $reports->attendanceRecords($branchIds, $from, $to, $branchId, $request->string('q')->trim()->toString() ?: null),
+            'branches' => $branches, 'branchId' => $branchId, 'from' => $from, 'to' => $to,
+        ]);
+    }
+
+    public function attendanceLeaderRanking(Request $request, OperationalReportService $reports, BranchAccessService $access): View
+    {
+        [$branchIds, $branches, $branchId, $from, $to] = $this->filters($request, $access, PermissionCode::AttendanceView);
+
+        return view('admin.reports.attendance-leader-ranking', [
+            'rows' => $reports->attendanceByLeader($branchIds, $from, $to, $branchId),
+            'branches' => $branches, 'branchId' => $branchId, 'from' => $from, 'to' => $to,
+        ]);
+    }
+
+    public function attendanceChurchRanking(Request $request, OperationalReportService $reports, BranchAccessService $access): View
+    {
+        [$branchIds, $branches, $branchId, $from, $to] = $this->filters($request, $access, PermissionCode::AttendanceView);
+
+        return view('admin.reports.attendance-church-ranking', [
+            'rows' => $reports->attendanceByChurch($branchIds, $from, $to, $branchId),
+            'branches' => $branches, 'branchId' => $branchId, 'from' => $from, 'to' => $to,
+        ]);
+    }
+
+    public function givingRecords(Request $request, OperationalReportService $reports, BranchAccessService $access, ChurchContext $church): View
+    {
+        [$branchIds, $branches, $branchId, $from, $to] = $this->filters($request, $access, PermissionCode::FinancialReportsView);
+
+        return view('admin.reports.giving-records', [
+            'rows' => $reports->givingByService($branchIds, $from, $to, $branchId), 'currency' => $church->currency(),
+            'branches' => $branches, 'branchId' => $branchId, 'from' => $from, 'to' => $to,
+        ]);
+    }
+
+    public function givingLeaderRanking(Request $request, OperationalReportService $reports, BranchAccessService $access, ChurchContext $church): View
+    {
+        [$branchIds, $branches, $branchId, $from, $to] = $this->filters($request, $access, PermissionCode::FinancialReportsView);
+
+        return view('admin.reports.giving-leader-ranking', [
+            'rows' => $reports->givingByLeader($branchIds, $from, $to, $branchId), 'currency' => $church->currency(),
+            'branches' => $branches, 'branchId' => $branchId, 'from' => $from, 'to' => $to,
+        ]);
+    }
+
+    public function absenceFollowUp(Request $request, OperationalReportService $reports, BranchAccessService $access): View
+    {
+        [$branchIds, $branches, $branchId, $from, $to] = $this->filters($request, $access, PermissionCode::AttendanceView);
+        $minimumAbsences = (int) $request->integer('minimum_absences', 2);
+
+        return view('admin.reports.absence-follow-up', [
+            'rows' => $reports->absenceFollowUp($branchIds, $from, $to, $branchId, $minimumAbsences, $request->string('q')->trim()->toString() ?: null),
+            'minimumAbsences' => $minimumAbsences, 'branches' => $branches, 'branchId' => $branchId, 'from' => $from, 'to' => $to,
+        ]);
+    }
+
+    /** @return array{Collection<int, string>, Collection<int, Branch>, ?string, CarbonImmutable, CarbonImmutable} */
+    private function filters(Request $request, BranchAccessService $access, PermissionCode $permission): array
+    {
+        $validated = $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'branch_id' => ['nullable', 'uuid'],
+            'q' => ['nullable', 'string', 'max:100'],
+            'minimum_absences' => ['nullable', 'integer', 'min:2', 'max:52'],
+        ]);
+        $branchIds = $access->accessibleBranchIds(backpack_user(), $permission);
+        abort_if($branchIds->isEmpty() && ! $access->allows(backpack_user(), $permission), 403);
+        $branchId = $validated['branch_id'] ?? null;
+        abort_if($branchId !== null && ! $branchIds->contains($branchId), 403);
+
+        return [
+            $branchIds,
+            Branch::query()->whereIn('id', $branchIds)->orderBy('name')->get(),
+            $branchId,
+            isset($validated['from']) ? CarbonImmutable::parse($validated['from'])->startOfDay() : CarbonImmutable::today()->subDays(29),
+            isset($validated['to']) ? CarbonImmutable::parse($validated['to'])->endOfDay() : CarbonImmutable::today()->endOfDay(),
+        ];
     }
 }

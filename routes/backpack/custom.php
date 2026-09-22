@@ -116,6 +116,12 @@ Route::group([
     Route::get('reports/finance', [ReportsController::class, 'finance'])->name('admin.reports.finance');
     Route::get('reports/attendance', [ReportsController::class, 'attendance'])->name('admin.reports.attendance');
     Route::get('reports/members', [ReportsController::class, 'members'])->name('admin.reports.members');
+    Route::get('reports/attendance-records', [ReportsController::class, 'attendanceRecords'])->name('admin.reports.attendance-records');
+    Route::get('reports/attendance-leaders', [ReportsController::class, 'attendanceLeaderRanking'])->name('admin.reports.attendance-leaders');
+    Route::get('reports/attendance-churches', [ReportsController::class, 'attendanceChurchRanking'])->name('admin.reports.attendance-churches');
+    Route::get('reports/giving-records', [ReportsController::class, 'givingRecords'])->name('admin.reports.giving-records');
+    Route::get('reports/giving-leaders', [ReportsController::class, 'givingLeaderRanking'])->name('admin.reports.giving-leaders');
+    Route::get('reports/absence-follow-up', [ReportsController::class, 'absenceFollowUp'])->name('admin.reports.absence-follow-up');
     Route::get('broadcasts/compose', [BroadcastComposerController::class, 'create'])->name('admin.broadcasts.create');
     Route::post('broadcasts', [BroadcastComposerController::class, 'store'])->name('admin.broadcasts.store');
     Route::post('broadcasts/{broadcast}/send', [BroadcastComposerController::class, 'send'])->name('admin.broadcasts.send');

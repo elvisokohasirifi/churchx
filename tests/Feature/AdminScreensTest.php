@@ -29,6 +29,8 @@ it('renders the authenticated administration surfaces', function (string $path) 
     'payment-methods', 'funds', 'giving-types', 'financial-accounts', 'income', 'offerings',
     'expense-types', 'expenses', 'expense-approvals/queue', 'pledges', 'account-transfers',
     'assets', 'asset-types', 'audit-logs', 'reports/finance', 'reports/attendance', 'reports/members',
+    'reports/attendance-records', 'reports/attendance-leaders', 'reports/attendance-churches',
+    'reports/giving-records', 'reports/giving-leaders', 'reports/absence-follow-up',
     'broadcasts/compose',
 ]);
 

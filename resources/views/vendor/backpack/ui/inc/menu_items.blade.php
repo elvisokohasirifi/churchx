@@ -41,7 +41,6 @@
         <x-backpack::menu-dropdown-item title="Services" icon="la la-calendar" :link="backpack_url('services')" />
         <x-backpack::menu-dropdown-item title="Capture Attendance" icon="la la-clipboard-check" :link="backpack_url('attendance/capture')" />
         <x-backpack::menu-dropdown-item title="Attendance Register" icon="la la-list-check" :link="backpack_url('attendance/register')" />
-        <x-backpack::menu-dropdown-item title="Attendance Report" icon="la la-chart-bar" :link="backpack_url('reports/attendance')" />
     </x-backpack::menu-dropdown>
 @endif
 @if ($canViewIncome || $canCaptureOfferings || $canViewExpenses || $canApproveExpenses || $canTransferAccounts || $canViewFinancialReports)
@@ -63,7 +62,6 @@
         @endif
         @if ($canViewFinancialReports)
             <x-backpack::menu-dropdown-item title="Pledges" icon="la la-handshake" :link="backpack_url('pledges')" />
-            <x-backpack::menu-dropdown-item title="Financial Report" icon="la la-chart-line" :link="backpack_url('reports/finance')" />
         @endif
     </x-backpack::menu-dropdown>
 @endif
@@ -88,6 +86,25 @@
 @endif
 @if ($canViewAssets)
     <x-backpack::menu-item title="Assets" icon="la la-boxes" :link="backpack_url('assets')" />
+@endif
+@if ($canViewAttendance || $canViewFinancialReports || $hasAccess(\App\PermissionCode::MembersView))
+    <x-backpack::menu-dropdown title="Reports" icon="la la-chart-pie">
+        @if ($canViewAttendance)
+            <x-backpack::menu-dropdown-item title="Attendance Summary" icon="la la-chart-bar" :link="backpack_url('reports/attendance')" />
+            <x-backpack::menu-dropdown-item title="Attendance Records" icon="la la-clipboard-list" :link="backpack_url('reports/attendance-records')" />
+            <x-backpack::menu-dropdown-item title="Attendance by Leader" icon="la la-user-tie" :link="backpack_url('reports/attendance-leaders')" />
+            <x-backpack::menu-dropdown-item title="Attendance by Church" icon="la la-church" :link="backpack_url('reports/attendance-churches')" />
+            <x-backpack::menu-dropdown-item title="Absence Follow-up" icon="la la-phone" :link="backpack_url('reports/absence-follow-up')" />
+        @endif
+        @if ($canViewFinancialReports)
+            <x-backpack::menu-dropdown-item title="Giving by Service" icon="la la-hand-holding-usd" :link="backpack_url('reports/giving-records')" />
+            <x-backpack::menu-dropdown-item title="Giving by Leader" icon="la la-trophy" :link="backpack_url('reports/giving-leaders')" />
+            <x-backpack::menu-dropdown-item title="Financial Report" icon="la la-chart-line" :link="backpack_url('reports/finance')" />
+        @endif
+        @if ($hasAccess(\App\PermissionCode::MembersView))
+            <x-backpack::menu-dropdown-item title="Member Report" icon="la la-users" :link="backpack_url('reports/members')" />
+        @endif
+    </x-backpack::menu-dropdown>
 @endif
 @if ($menuUser?->hasActiveRole('App Administrator'))
     <x-backpack::menu-dropdown title="Files & Logs" icon="la la-folder-open">

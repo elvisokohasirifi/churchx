@@ -222,7 +222,7 @@ class HelpCenterService
                 [
                     $this->task('Capture attendance totals', ['Open Capture Attendance.', 'Choose the branch and service.', 'Enter every attendance total, using zero where applicable.', 'Save the summary.'], 'attendance.capture'),
                     $this->task('Complete the attendance register', ['Open Attendance Register.', 'Choose a branch and service.', 'Mark every listed member Present or Absent.', 'Submit the register. The summary is updated from the register.'], 'attendance.capture'),
-                    $this->task('Review attendance reports', ['Open Attendance Report.', 'Review captured summaries for accessible branches.', 'Use Ask Data for trends and branch or leader comparisons.']),
+                    $this->task('Review attendance reports', ['Open Reports.', 'Use Attendance Records for each member’s present and absent marks over a period.', 'Use Attendance by Leader or Attendance by Church for rankings.', 'Use Absence Follow-up to find members absent at least twice and contact them.']),
                 ],
                 ['attendance.view'],
             ),
@@ -378,7 +378,7 @@ class HelpCenterService
                 [
                     $this->task('Initiate a transfer', ['Open Finance → Account Transfers.', 'Choose different source and destination accounts.', 'Enter amount, matching currency, date, and reference.', 'Submit for approval.'], 'transfers.create'),
                     $this->task('Approve and complete a transfer', ['Review the pending transfer.', 'Approve it if authorized and the account details are correct.', 'Complete it after the movement is confirmed.'], 'transfers.approve'),
-                    $this->task('Review financial reports', ['Open Financial Report.', 'Choose a branch when needed.', 'Review completed income, paid expenses, and account balances.', 'Use Ask Data for charts and comparisons.'], 'financial_reports.view'),
+                    $this->task('Review financial reports', ['Open Reports.', 'Use Giving by Service to review completed income for each service.', 'Use Giving by Leader to compare combined branch totals for each leader.', 'Open Financial Report for completed income, paid expenses, and account balances.'], 'financial_reports.view'),
                 ],
                 ['financial_reports.view'],
             ),
