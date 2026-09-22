@@ -54,7 +54,7 @@ it('registers the first user as church-wide app administrator and configures the
         ->and($user->phone)->toBe('+233240000000')
         ->and($user->roles()->where('name', 'App Administrator')->wherePivotNull('branch_id')->exists())->toBeTrue()
         ->and($user->roles()->firstOrFail()->permissions()->count())->toBe(count(PermissionCode::cases()))
-        ->and(Role::query()->count())->toBe(7)
+        ->and(Role::query()->count())->toBe(8)
         ->and(AuditLog::query()->where('action', 'church.initial_registration')->exists())->toBeTrue();
     Notification::assertSentTo($user, UserAccessGrantedNotification::class);
 });

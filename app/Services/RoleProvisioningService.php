@@ -62,6 +62,7 @@ class RoleProvisioningService
                 'departments.view', 'groups.view', 'events.view', 'events.manage', 'broadcasts.view',
                 'income.view', 'income.create',
             ],
+            'Zone Leader' => [],
             'Finance Officer' => [
                 'income.view', 'income.create', 'income.update', 'offerings.capture', 'offerings.verify',
                 'expenses.view', 'expenses.create', 'expenses.approve', 'expenses.disburse', 'transfers.create',

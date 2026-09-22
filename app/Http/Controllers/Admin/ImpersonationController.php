@@ -18,7 +18,11 @@ class ImpersonationController extends Controller
         abort_unless($administrator instanceof User && $administrator->hasActiveRole('App Administrator'), 403);
         abort_if($request->session()->has(self::SESSION_KEY), 409, 'An impersonation session is already active.');
         abort_if($administrator->is($user), 422, 'You cannot impersonate yourself.');
-        abort_unless($user->is_active && $user->roleAssignments()->where('is_active', true)->exists(), 422, 'Only active leaders can be impersonated.');
+        abort_unless(
+            $user->is_active && ($user->roleAssignments()->where('is_active', true)->exists() || $user->hasActiveZoneLeadership()),
+            422,
+            'Only active leaders can be impersonated.',
+        );
 
         $audit->record('user.impersonation.started', $administrator, $user, request: $request);
         $request->session()->put(self::SESSION_KEY, $administrator->id);

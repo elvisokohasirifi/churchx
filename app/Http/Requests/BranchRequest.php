@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\BranchStatus;
 use App\Models\Branch;
+use App\Models\BranchLeader;
 use App\Models\Member;
 use App\PermissionCode;
 use App\Services\BranchAccessService;
@@ -37,6 +38,7 @@ class BranchRequest extends FormRequest
             : 'prohibited';
 
         return [
+            'zone_id' => ['nullable', 'uuid', Rule::exists('zones', 'id')->whereNull('deleted_at')],
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:20', Rule::unique('branches')->ignore($this->route('id'))],
             'address' => ['nullable', 'string', 'max:2000'],
@@ -83,6 +85,31 @@ class BranchRequest extends FormRequest
                 }
 
                 $combinations[$combination] = true;
+
+                $leaderId = data_get($leader, 'id');
+                if (! is_string($leaderId) || ! BranchLeader::query()->whereKey($leaderId)->whereHas('assignedMembers')->exists()) {
+                    continue;
+                }
+
+                $isActive = filter_var(data_get($leader, 'is_active'), FILTER_VALIDATE_BOOL);
+                $startDate = data_get($leader, 'start_date');
+                $endDate = data_get($leader, 'end_date');
+                if (! $isActive || (is_string($startDate) && $startDate > today()->toDateString()) || (is_string($endDate) && $endDate < today()->toDateString())) {
+                    $validator->errors()->add("leaders.{$index}.is_active", 'Reassign this leader’s members before ending or deactivating the appointment.');
+                }
+            }
+
+            if ($branchId) {
+                $submittedLeaderIds = collect((array) $this->input('leaders', []))->pluck('id')->filter();
+                $removesAssignedLeader = BranchLeader::query()
+                    ->where('branch_id', $branchId)
+                    ->whereNotIn('id', $submittedLeaderIds)
+                    ->whereHas('assignedMembers')
+                    ->exists();
+
+                if ($removesAssignedLeader) {
+                    $validator->errors()->add('leaders', 'Reassign members before removing a branch leader.');
+                }
             }
         }];
     }

@@ -27,6 +27,11 @@ class User extends Authenticatable
         return $this->hasMany(UserRole::class);
     }
 
+    public function zoneLeadership(): HasMany
+    {
+        return $this->hasMany(ZoneLeader::class);
+    }
+
     public function member(): BelongsTo
     {
         return $this->belongsTo(Member::class);
@@ -44,6 +49,23 @@ class User extends Authenticatable
         return $this->roleAssignments()
             ->where('is_active', true)
             ->whereHas('role', fn ($query) => $query->where('name', $roleName))
+            ->exists();
+    }
+
+    public function hasActiveZoneLeadership(): bool
+    {
+        if ($this->relationLoaded('zoneLeadership') && $this->zoneLeadership->every->relationLoaded('zone')) {
+            return $this->zoneLeadership->contains(fn (ZoneLeader $appointment): bool => $appointment->is_active
+                && $appointment->zone?->is_active
+                && $appointment->start_date->lessThanOrEqualTo(today())
+                && ($appointment->end_date === null || $appointment->end_date->greaterThanOrEqualTo(today())));
+        }
+
+        return $this->zoneLeadership()
+            ->whereHas('zone', fn ($query) => $query->where('is_active', true))
+            ->where('is_active', true)
+            ->whereDate('start_date', '<=', today())
+            ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', today()))
             ->exists();
     }
 

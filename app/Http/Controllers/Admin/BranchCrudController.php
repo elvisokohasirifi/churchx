@@ -8,6 +8,7 @@ use App\Models\Branch;
 use App\Models\BranchLeader;
 use App\Models\LeadershipTitle;
 use App\Models\Member;
+use App\Models\Zone;
 use App\PermissionCode;
 use App\Services\BranchAccessService;
 use Backpack\CRUD\app\Http\Controllers\CrudController;
@@ -70,11 +71,13 @@ class BranchCrudController extends CrudController
      */
     protected function setupListOperation(): void
     {
+        CRUD::column('zone_id')->type('select')->entity('zone')->model(Zone::class)->attribute('name')->label('Zone');
         CRUD::column('name');
         CRUD::column('code');
         CRUD::column('location');
         CRUD::column('status')->type('enum');
         CRUD::column('date_started')->type('date');
+        CRUD::addButtonFromView('top', 'branch_csv_import', 'branch_csv_import', 'end');
     }
 
     /**
@@ -92,6 +95,7 @@ class BranchCrudController extends CrudController
         }
 
         CRUD::setValidation(BranchRequest::class);
+        CRUD::field('zone_id')->type('select')->entity('zone')->model(Zone::class)->attribute('name')->allows_null(true)->label('Zone')->hint('Optional. Leave empty for churches that do not use zones.');
         CRUD::field('name');
         CRUD::field('code')->hint('Short unique code, for example HQ or ACC.');
         CRUD::field('address')->type('textarea');
@@ -123,10 +127,18 @@ class BranchCrudController extends CrudController
 
     protected function setupShowOperation(): void
     {
+        CRUD::with(['leaders.member', 'leaders.leadershipTitle']);
         CRUD::removeAllColumns();
         $this->setupListOperation();
         CRUD::column('address')->type('textarea');
         CRUD::column('gps_coordinates')->label('GPS coordinates');
+        CRUD::column('active_branch_leaders')
+            ->type('text')
+            ->label('Active branch leaders')
+            ->value(fn (Branch $branch): string => $branch->leaders
+                ->where('is_active', true)
+                ->map(fn (BranchLeader $leader): string => $leader->member->full_name.' — '.$leader->leadershipTitle->name)
+                ->join('; ') ?: 'No active branch leaders');
     }
 
     public function store(): RedirectResponse

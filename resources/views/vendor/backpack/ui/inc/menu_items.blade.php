@@ -32,6 +32,7 @@
     $canViewUsers = $menuUser?->can('users.view');
     $canManageRoles = $menuUser?->can('roles.manage');
     $canViewAccessControl = $canViewUsers || $canManageRoles;
+    $canViewZones = $menuUser && ($hasAccess(\App\PermissionCode::BranchesView) || $branchAccess->activeZoneIds($menuUser)->isNotEmpty());
     $canViewSetup = $menuUser?->hasActiveRole('App Administrator') || $menuUser?->hasActiveRole('Church Administrator');
     $canUseAskData = $canViewAttendance || $hasAccess(\App\PermissionCode::MembersView) || $canViewFinancialReports;
 @endphp
@@ -97,7 +98,8 @@
         <x-backpack::menu-dropdown-item title="Backups" icon="la la-database" :link="backpack_url('backups')" />
     </x-backpack::menu-dropdown>
 @endif
-@if (backpack_user() && (backpack_user()->can('branches.view') || app(\App\Services\BranchAccessService::class)->accessibleBranchIds(backpack_user(), \App\PermissionCode::BranchesView)->isNotEmpty()))
+@if ($canViewZones)
+    <x-backpack::menu-item title="Zones" icon="la la-layer-group" :link="backpack_url('zones')" />
     <x-backpack::menu-item title="Branches" icon="la la-code-branch" :link="backpack_url('branches')" />
 @endif
 @if ($canViewAccessControl)
@@ -118,7 +120,8 @@
         <x-backpack::menu-dropdown-item title="Households" icon="la la-home" :link="backpack_url('households')" />
     </x-backpack::menu-dropdown>
 @endif
-@if (backpack_user() && (backpack_user()->can('branches.view') || app(\App\Services\BranchAccessService::class)->accessibleBranchIds(backpack_user(), \App\PermissionCode::BranchesView)->isNotEmpty()))
+@if ($canViewZones)
+    <x-backpack::menu-item title="Zone Leaders" icon="la la-users-cog" :link="backpack_url('zone-leaders')" />
     <x-backpack::menu-item title="Branch Leaders" icon="la la-user-tie" :link="backpack_url('branch-leaders')" />
 @endif
 @if ($canViewSetup)

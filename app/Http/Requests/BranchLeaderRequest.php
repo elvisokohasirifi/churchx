@@ -3,9 +3,11 @@
 namespace App\Http\Requests;
 
 use App\Models\Branch;
+use App\Models\BranchLeader;
 use App\PermissionCode;
 use App\Services\BranchAccessService;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class BranchLeaderRequest extends FormRequest
 {
@@ -33,6 +35,29 @@ class BranchLeaderRequest extends FormRequest
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
             'is_active' => ['required', 'boolean'],
         ];
+    }
+
+    /** @return array<int, callable(Validator): void> */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            $leaderId = $this->route('id');
+            if (! $leaderId || $validator->errors()->hasAny(['start_date', 'end_date', 'is_active'])) {
+                return;
+            }
+
+            $hasAssignedMembers = BranchLeader::query()
+                ->whereKey($leaderId)
+                ->whereHas('assignedMembers')
+                ->exists();
+            $isCurrent = $this->boolean('is_active')
+                && $this->date('start_date')?->lte(today())
+                && ($this->date('end_date') === null || $this->date('end_date')->gte(today()));
+
+            if ($hasAssignedMembers && ! $isCurrent) {
+                $validator->errors()->add('is_active', 'Reassign this leader’s members before ending or deactivating the appointment.');
+            }
+        }];
     }
 
     /**

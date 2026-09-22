@@ -2,6 +2,8 @@
 
 use App\MemberBranchStatus;
 use App\Models\Branch;
+use App\Models\BranchLeader;
+use App\Models\LeadershipTitle;
 use App\Models\Member;
 use App\Models\MemberBranch;
 use App\Services\MembershipNumberGenerator;
@@ -20,6 +22,14 @@ it('transfers a member while preserving branch history', function () {
     $oldBranch = Branch::factory()->create();
     $newBranch = Branch::factory()->create();
     $member = Member::factory()->create();
+    $leaderMember = Member::factory()->create();
+    $branchLeader = BranchLeader::query()->create([
+        'branch_id' => $newBranch->id,
+        'member_id' => $leaderMember->id,
+        'leadership_title_id' => LeadershipTitle::query()->create(['name' => 'Transfer Pastor'])->id,
+        'start_date' => today(),
+        'is_active' => true,
+    ]);
     $original = MemberBranch::query()->create([
         'member_id' => $member->id,
         'branch_id' => $oldBranch->id,
@@ -28,12 +38,13 @@ it('transfers a member while preserving branch history', function () {
         'status' => MemberBranchStatus::Active,
     ]);
 
-    $newMembership = app(MemberTransferService::class)->transfer($member, $newBranch, today());
+    $newMembership = app(MemberTransferService::class)->transfer($member, $newBranch, $branchLeader, today());
 
     expect($original->fresh()->is_primary)->toBeFalse()
         ->and($original->fresh()->left_date->isToday())->toBeTrue()
         ->and($newMembership->branch_id)->toBe($newBranch->id)
         ->and($newMembership->is_primary)->toBeTrue()
+        ->and($member->fresh()->branch_leader_id)->toBe($branchLeader->id)
         ->and($member->branchHistory()->count())->toBe(2);
 });
 

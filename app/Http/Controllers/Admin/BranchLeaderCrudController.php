@@ -46,7 +46,10 @@ class BranchLeaderCrudController extends CrudController
         CRUD::addClause('whereIn', 'branch_id', $branchIds);
         CRUD::setAccessCondition(['list', 'show'], $branchIds->isNotEmpty() || $access->allows($user, PermissionCode::BranchesView));
         CRUD::setAccessCondition('create', $access->allows($user, PermissionCode::BranchesManage) || $access->accessibleBranchIds($user, PermissionCode::BranchesManage)->isNotEmpty());
-        CRUD::setAccessCondition(['update', 'delete'], fn (?BranchLeader $entry): bool => $entry !== null && $access->allows($user, PermissionCode::BranchesManage, $entry->branch_id));
+        CRUD::setAccessCondition('update', fn (?BranchLeader $entry): bool => $entry !== null && $access->allows($user, PermissionCode::BranchesManage, $entry->branch_id));
+        CRUD::setAccessCondition('delete', fn (?BranchLeader $entry): bool => $entry !== null
+            && $access->allows($user, PermissionCode::BranchesManage, $entry->branch_id)
+            && ! $entry->assignedMembers()->exists());
     }
 
     /**

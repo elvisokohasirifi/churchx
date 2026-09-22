@@ -33,7 +33,7 @@ class CheckIfAdmin
     {
         return $user instanceof User
             && $user->is_active
-            && $user->roleAssignments()->where('is_active', true)->exists();
+            && ($user->roleAssignments()->where('is_active', true)->exists() || $user->hasActiveZoneLeadership());
     }
 
     /**

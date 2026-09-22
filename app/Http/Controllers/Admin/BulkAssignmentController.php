@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\BranchDepartment;
 use App\Models\BranchDepartmentMember;
+use App\Models\BranchLeader;
 use App\Models\ChurchGroup;
 use App\Models\Department;
 use App\Models\DepartmentRole;
@@ -39,6 +40,16 @@ class BulkAssignmentController extends Controller
             'groups' => ChurchGroup::query()->with('branch')->whereIn('branch_id', $groupBranchIds)->orderBy('name')->get(),
             'households' => Household::query()->orderBy('family_name')->get(),
             'relationships' => HouseholdRelationship::query()->orderBy('name')->get(),
+            'memberBranches' => Branch::query()->whereIn('id', $memberBranchIds)->orderBy('name')->get(),
+            'branchLeaders' => BranchLeader::query()
+                ->with(['branch:id,name', 'member:id,first_name,middle_name,last_name', 'leadershipTitle:id,name'])
+                ->whereIn('branch_id', $memberBranchIds)
+                ->where('is_active', true)
+                ->whereDate('start_date', '<=', today())
+                ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', today()))
+                ->orderBy('start_date')
+                ->orderBy('id')
+                ->get(),
             'members' => Member::query()->with('primaryBranchMembership.branch')->whereHas('primaryBranchMembership', fn ($query) => $query->whereIn('branch_id', $departmentBranchIds->merge($groupBranchIds)->merge($memberBranchIds)->unique()))->orderBy('first_name')->get(),
         ]);
     }
@@ -136,6 +147,70 @@ class BulkAssignmentController extends Controller
         });
 
         return back()->with('success', 'Members assigned to the household.');
+    }
+
+    public function branchLeaderMembers(Request $request, BranchAccessService $access): RedirectResponse
+    {
+        $branchIds = $access->accessibleBranchIds(backpack_user(), PermissionCode::MembersUpdate);
+        $data = $request->validate([
+            'branch_id' => ['required', 'uuid', Rule::in($branchIds->all())],
+            'branch_leader_id' => ['required', 'uuid', 'exists:branch_leaders,id'],
+            'member_ids' => ['required', 'array', 'min:1'],
+            'member_ids.*' => ['required', 'uuid', 'distinct', 'exists:members,id'],
+        ]);
+        $branchLeader = BranchLeader::query()
+            ->whereKey($data['branch_leader_id'])
+            ->where('branch_id', $data['branch_id'])
+            ->where('is_active', true)
+            ->whereDate('start_date', '<=', today())
+            ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', today()))
+            ->first();
+        abort_unless($branchLeader !== null, 422, 'Select an active leader from the selected branch.');
+        $this->ensureMembersBelongToBranch($data['member_ids'], $data['branch_id']);
+
+        $hasLeaderAsShepherd = Member::query()
+            ->whereIn('id', $data['member_ids'])
+            ->where('shepherd_id', $branchLeader->member_id)
+            ->exists();
+        abort_if($hasLeaderAsShepherd, 422, 'The branch leader must be different from each selected member’s shepherd.');
+
+        Member::query()->whereIn('id', $data['member_ids'])->update(['branch_leader_id' => $branchLeader->id]);
+
+        return back()->with('success', 'Branch leader assigned to the selected members.');
+    }
+
+    public function shepherdMembers(Request $request, BranchAccessService $access): RedirectResponse
+    {
+        $branchIds = $access->accessibleBranchIds(backpack_user(), PermissionCode::MembersUpdate);
+        $data = $request->validate([
+            'branch_id' => ['required', 'uuid', Rule::in($branchIds->all())],
+            'shepherd_id' => ['nullable', 'uuid', 'exists:members,id'],
+            'member_ids' => ['required', 'array', 'min:1'],
+            'member_ids.*' => ['required', 'uuid', 'distinct', 'exists:members,id'],
+        ]);
+        $this->ensureMembersBelongToBranch($data['member_ids'], $data['branch_id']);
+        $shepherdId = $data['shepherd_id'] ?? null;
+
+        if ($shepherdId !== null) {
+            $shepherdBelongsToBranch = Member::query()->whereKey($shepherdId)->whereHas(
+                'primaryBranchMembership',
+                fn ($query) => $query->where('branch_id', $data['branch_id']),
+            )->exists();
+            abort_unless($shepherdBelongsToBranch, 422, 'The shepherd must belong to the selected branch.');
+            abort_if(in_array($shepherdId, $data['member_ids'], true), 422, 'A member cannot be their own shepherd.');
+
+            $conflictsWithLeader = Member::query()
+                ->whereIn('id', $data['member_ids'])
+                ->whereHas('branchLeader', fn ($query) => $query->where('member_id', $shepherdId))
+                ->exists();
+            abort_if($conflictsWithLeader, 422, 'The shepherd must be different from each selected member’s branch leader.');
+        }
+
+        Member::query()->whereIn('id', $data['member_ids'])->update(['shepherd_id' => $shepherdId]);
+
+        return back()->with('success', $shepherdId === null
+            ? 'Shepherd assignments cleared for the selected members.'
+            : 'Shepherd assigned to the selected members.');
     }
 
     /** @param list<string> $memberIds */

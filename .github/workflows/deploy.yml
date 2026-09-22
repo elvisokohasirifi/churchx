@@ -1,0 +1,217 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or commit to deploy
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: churchx-production-deployment
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release
+    runs-on: ubuntu-latest
+    outputs:
+      revision: ${{ steps.revision.outputs.sha }}
+
+    steps:
+      - name: Check out release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Record release revision
+        id: revision
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45 # v2
+        with:
+          php-version: '8.4'
+          extensions: bcmath, gd, intl, mbstring, pdo_sqlite, sqlite3, zip
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Run application tests
+        run: php artisan test --compact
+
+  deploy:
+    name: Deploy to production servers
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      DEPLOY_TARGETS: ${{ secrets.DEPLOY_TARGETS }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      RELEASE_REVISION: ${{ needs.verify.outputs.revision }}
+
+    steps:
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          for variable in DEPLOY_TARGETS DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS RELEASE_REVISION; do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "::error::${variable} is not configured for the production environment."
+              exit 1
+            fi
+          done
+
+          if [[ ! "$RELEASE_REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The resolved release revision is invalid."
+            exit 1
+          fi
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
+
+      - name: Deploy each server
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          target_count=0
+
+          while IFS='|' read -r host port user application_path extra; do
+            host="${host//$'\r'/}"
+            port="${port//$'\r'/}"
+            user="${user//$'\r'/}"
+            application_path="${application_path//$'\r'/}"
+
+            if [[ -z "$host" ]]; then
+              continue
+            fi
+
+            target_count=$((target_count + 1))
+
+            if [[ -n "${extra:-}" || ! "$host" =~ ^[A-Za-z0-9._-]+$ || ! "$port" =~ ^[0-9]+$ || ! "$user" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ || ! "$application_path" =~ ^/[A-Za-z0-9_./-]+$ ]]; then
+              echo "::error::Deployment target ${target_count} is invalid. Expected host|port|user|/absolute/path."
+              exit 1
+            fi
+
+            echo "Deploying target ${target_count}..."
+
+            ssh \
+              -i "$HOME/.ssh/deploy_key" \
+              -o BatchMode=yes \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=15 \
+              -p "$port" \
+              "${user}@${host}" \
+              "bash -s -- '$application_path' '$RELEASE_REVISION'" <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          application_path="$1"
+          release_revision="$2"
+
+          cd "$application_path"
+
+          if [[ ! -f artisan || ! -f composer.json || ! -d .git ]]; then
+            echo "The deployment path is not a Laravel Git checkout: $application_path" >&2
+            exit 1
+          fi
+
+          git fetch --prune origin "$release_revision"
+
+          maintenance_enabled=false
+
+          restore_application() {
+            if [[ "$maintenance_enabled" == true && -f artisan ]]; then
+              php artisan up --no-interaction || true
+            fi
+          }
+
+          trap restore_application EXIT
+
+          php artisan down --retry=60 --refresh=15 --no-interaction
+          maintenance_enabled=true
+
+          git checkout --force --detach "$release_revision"
+
+          install -d -m 775 storage bootstrap/cache
+          chmod -R ug+rwX storage bootstrap/cache
+
+          composer install \
+            --no-dev \
+            --no-interaction \
+            --prefer-dist \
+            --optimize-autoloader \
+            --no-progress
+
+          npm ci
+          npm run build
+
+          php artisan optimize:clear --no-interaction
+          php artisan migrate --force --isolated --no-interaction
+          php artisan storage:link --no-interaction
+          php artisan vendor:publish --tag=laravel-assets --force --no-interaction
+          php artisan basset:cache --stale --no-interaction
+          php artisan optimize --no-interaction
+          php artisan schedule:interrupt --no-interaction
+          php artisan reload --no-interaction
+
+          php artisan up --no-interaction
+          maintenance_enabled=false
+          trap - EXIT
+          REMOTE_SCRIPT
+
+            echo "Target ${target_count} deployed successfully."
+          done <<< "$DEPLOY_TARGETS"
+
+          if [[ "$target_count" -eq 0 ]]; then
+            echo "::error::DEPLOY_TARGETS does not contain any servers."
+            exit 1
+          fi
+
+      - name: Check production health endpoints
+        if: ${{ vars.DEPLOY_HEALTHCHECK_URLS != '' }}
+        shell: bash
+        env:
+          HEALTHCHECK_URLS: ${{ vars.DEPLOY_HEALTHCHECK_URLS }}
+        run: |
+          set -Eeuo pipefail
+
+          while IFS= read -r url; do
+            url="${url//$'\r'/}"
+
+            if [[ -n "$url" ]]; then
+              curl --fail --silent --show-error --location --retry 5 --retry-delay 5 --max-time 30 "$url" > /dev/null
+            fi
+          done <<< "$HEALTHCHECK_URLS"

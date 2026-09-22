@@ -24,6 +24,8 @@ class HelpCenterService
             ->get()
             ->pluck('role.name')
             ->filter()
+            ->when($user->hasActiveZoneLeadership(), fn ($roles) => $roles->push('Zone Leader'))
+            ->unique()
             ->values()
             ->all();
 
@@ -80,36 +82,58 @@ class HelpCenterService
             $this->article(
                 'Church structure',
                 'Church and branches',
-                'Church stores the organization-wide identity and defaults. Branch represents a church location or congregation. Branch records can include one or more active leaders.',
+                'Church stores the organization-wide identity and defaults. A branch represents a church location or congregation and may optionally belong to a zone. Branch records can include multiple active leaders.',
                 [
                     'Church' => 'The single organization record containing the church name, contact details, address, currency, and timezone.',
-                    'Branch' => 'A church location with its own code, address, status, members, leaders, services, and scoped operational records.',
+                    'Branch' => 'A church location with its own code, optional zone, address, status, members, leaders, services, and scoped operational records.',
                 ],
-                ['name', 'code', 'address', 'location', 'gps_coordinates', 'date_started', 'status', 'leaders'],
+                ['zone_id', 'name', 'code', 'address', 'location', 'gps_coordinates', 'date_started', 'status', 'leaders'],
                 ['name', 'code', 'status'],
                 'branches',
                 [
                     $this->task('View branches', ['Open Branches.', 'Search by name or code.', 'Open a row to see its details and leaders.']),
-                    $this->task('Add a branch', ['Open Branches and select Add branch.', 'Enter the required identity fields.', 'Optionally add one or more leaders.', 'Save the branch.'], 'branches.manage'),
+                    $this->task('Add a branch', ['Open Branches and select Add branch.', 'Optionally choose its zone.', 'Enter the required identity fields.', 'Optionally add one or more branch leaders.', 'Save the branch.'], 'branches.manage'),
+                    $this->task('Import branches from CSV', ['Open Branches and select Import CSV.', 'Download the sample CSV and retain its column headings.', 'Enter a unique code for every branch.', 'Upload the completed file. No branches are created if any row fails validation.'], 'branches.manage'),
                     $this->task('Edit branch leaders', ['Edit the branch.', 'Add, change, or remove leader rows.', 'Use active dates to preserve leadership history.', 'Save the branch.'], 'branches.manage'),
+                ],
+                ['branches.view'],
+            ),
+            $this->article(
+                'Church structure',
+                'Zones and zone leadership',
+                'Zone groups branches under an optional level of oversight. An active ZoneLeader appointment automatically gives its user read-only access to branch and member information throughout that zone.',
+                [
+                    'Zone' => 'An optional grouping of branches with a unique code and active state.',
+                    'ZoneLeader' => 'A dated appointment connecting an application user, zone, and leadership title.',
+                ],
+                ['name', 'code', 'description', 'is_active', 'zone_id', 'user_id', 'leadership_title_id', 'start_date', 'end_date'],
+                ['name', 'code', 'is_active', 'zone_id', 'user_id', 'leadership_title_id', 'start_date'],
+                'zones',
+                [
+                    $this->task('Create a zone', ['Open Zones and select Add zone.', 'Enter a unique name and code.', 'Save the zone, then assign branches to it from each branch form.'], 'branches.manage'),
+                    $this->task('Appoint a zone leader', ['Open Zone Leaders and select Add.', 'Choose the zone, active application user, and leadership title.', 'Set the appointment dates and active state.', 'Save. The user receives read-only access to branches in that zone.'], 'branches.manage'),
+                    $this->task('End zone access', ['Edit the Zone Leader appointment.', 'Set the end date or turn off Is active.', 'Save; zone-derived access ends immediately.'], 'branches.manage'),
                 ],
                 ['branches.view'],
             ),
             $this->article(
                 'People',
                 'Members and branch membership',
-                'Member is a person in the church directory. MemberBranch records a person’s branch history and identifies the current primary branch.',
+                'Member is a person in the church directory who must have an assigned branch leader and may separately have a shepherd for personal pastoral oversight. MemberBranch records a person’s branch history and identifies the current primary branch.',
                 [
-                    'Member' => 'A church member profile containing identity, contact, demographic, and membership information.',
+                    'Member' => 'A church member profile containing identity, contact, demographic, membership, required branch-leader assignment, and optional shepherd information.',
                     'MemberBranch' => 'The historical assignment of a member to a branch, including dates, primary status, and transfer state.',
                 ],
-                ['primary_branch_id', 'membership_number', 'first_name', 'middle_name', 'last_name', 'phone', 'alternative_phone', 'email', 'address', 'date_of_birth', 'gender', 'marital_status', 'occupation', 'highest_education', 'date_joined', 'membership_status', 'notes'],
-                ['primary_branch_id' => 'Required when creating a member', 'first_name', 'last_name', 'membership_status'],
+                ['primary_branch_id', 'membership_number', 'branch_leader_id', 'shepherd_id', 'first_name', 'middle_name', 'last_name', 'phone', 'alternative_phone', 'email', 'address', 'date_of_birth', 'gender', 'marital_status', 'occupation', 'highest_education', 'date_joined', 'membership_status', 'notes'],
+                ['primary_branch_id' => 'Required when creating a member', 'branch_leader_id' => 'Required when the branch has an active leader', 'first_name', 'last_name', 'membership_status'],
                 'members',
                 [
-                    $this->task('Add a member', ['Open People → Members and select Add member.', 'Choose the primary branch.', 'Enter the required name and membership status.', 'Add contact and demographic details where available.', 'Save the member.'], 'members.create'),
+                    $this->task('Add a member', ['Open People → Members and select Add member.', 'Choose the primary branch and an active leader from that branch.', 'Optionally choose a different member as the shepherd.', 'Enter the required name and membership status.', 'Add contact and demographic details where available.', 'Save the member.'], 'members.create'),
+                    $this->task('Import members from CSV', ['Open People → Members and select Import CSV.', 'Download the sample CSV and retain its column headings.', 'Use branch codes to assign primary branches; leave branch_leader_membership_number blank to use the branch’s first active leader.', 'Use membership numbers to identify shepherds.', 'Upload the completed file. No members are created if any row fails validation.'], 'members.create'),
+                    $this->task('Bulk assign branch leaders', ['Open Bulk Assignments.', 'Choose Members to branch leader.', 'Select the branch and active branch leader.', 'Select one or more members and submit.'], 'members.update'),
+                    $this->task('Bulk assign shepherds', ['Open Bulk Assignments.', 'Choose Members to shepherd.', 'Select the branch and shepherd, or choose Clear shepherd assignment.', 'Select one or more members and submit.'], 'members.update'),
                     $this->task('Update a member', ['Find the member in People → Members.', 'Select Edit, update the profile, and save.'], 'members.update'),
-                    $this->task('Transfer a member', ['Open the member record and choose Transfer.', 'Select the destination branch and transfer date.', 'Confirm the transfer; the previous branch assignment is retained as history.'], 'members.update'),
+                    $this->task('Transfer a member', ['Open the member record and choose Transfer.', 'Select the destination branch, its new branch leader, and the transfer date.', 'Confirm the transfer; the previous branch assignment is retained as history.'], 'members.update'),
                 ],
                 ['members.view'],
             ),
@@ -151,7 +175,7 @@ class HelpCenterService
             $this->article(
                 'Church structure',
                 'Branch leadership',
-                'BranchLeader assigns a member and leadership title to a branch for a dated period. LeadershipTitle defines reusable offices such as Branch Pastor or Administrator.',
+                'BranchLeader assigns a member and leadership title to a branch for a dated period. A branch can have multiple leaders. Branch leadership is separate from the personal shepherd recorded on an individual member.',
                 [
                     'BranchLeader' => 'A dated leadership appointment connecting a member, branch, and title.',
                     'LeadershipTitle' => 'A reusable church leadership office or designation.',
@@ -519,8 +543,11 @@ class HelpCenterService
             'status' => 'The record’s current workflow or lifecycle state.',
             'scope' => 'Whether the record applies to one branch, selected branches, or the whole church.',
             'branch_id' => 'The branch that owns or is responsible for the record.',
+            'zone_id' => 'The optional zone that groups and oversees one or more branches.',
             'branch_ids' => 'One or more branches that define the user or record scope.',
             'primary_branch_id' => 'The member’s current main branch.',
+            'branch_leader_id' => 'The active branch-leader appointment responsible for overseeing the member. It defaults to the branch’s first active leader and must be different from the shepherd.',
+            'shepherd_id' => 'The member in the same primary branch who provides pastoral oversight.',
             'member_id' => 'The member connected to this record.',
             'member_ids' => 'The members selected for a bulk assignment.',
             'user_id' => 'The application user connected to the record.',

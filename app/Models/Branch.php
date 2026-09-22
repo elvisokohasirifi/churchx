@@ -8,6 +8,7 @@ use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Database\Factories\BranchFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -17,8 +18,13 @@ class Branch extends Model
     use CrudTrait, HasFactory, HasUuid, SoftDeletes;
 
     protected $fillable = [
-        'name', 'code', 'address', 'location', 'gps_coordinates', 'date_started', 'status', 'started_by_member_id',
+        'zone_id', 'name', 'code', 'address', 'location', 'gps_coordinates', 'date_started', 'status', 'started_by_member_id',
     ];
+
+    public function zone(): BelongsTo
+    {
+        return $this->belongsTo(Zone::class);
+    }
 
     public function roleAssignments(): HasMany
     {

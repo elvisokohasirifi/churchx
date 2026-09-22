@@ -10,6 +10,7 @@ use App\Services\BranchAccessService;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class ConvertVisitorRequest extends FormRequest
 {
@@ -36,6 +37,7 @@ class ConvertVisitorRequest extends FormRequest
     {
         return [
             'first_name' => ['required', 'string', 'max:255'],
+            'branch_leader_id' => ['required', 'uuid', 'exists:branch_leaders,id'],
             'middle_name' => ['nullable', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:30'],
@@ -43,5 +45,28 @@ class ConvertVisitorRequest extends FormRequest
             'date_joined' => ['required', 'date'],
             'membership_status' => ['required', Rule::enum(MemberStatus::class)],
         ];
+    }
+
+    /** @return array<int, callable(Validator): void> */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            if ($validator->errors()->has('branch_leader_id')) {
+                return;
+            }
+
+            $visitor = $this->route('visitor');
+            $isValidLeader = $visitor instanceof Visitor && $visitor->branch
+                ->leaders()
+                ->whereKey($this->input('branch_leader_id'))
+                ->where('is_active', true)
+                ->whereDate('start_date', '<=', today())
+                ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', today()))
+                ->exists();
+
+            if (! $isValidLeader) {
+                $validator->errors()->add('branch_leader_id', 'Select an active leader from the visitor’s branch.');
+            }
+        }];
     }
 }

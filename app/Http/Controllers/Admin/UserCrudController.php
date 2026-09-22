@@ -54,7 +54,7 @@ class UserCrudController extends CrudController
      */
     protected function setupListOperation(): void
     {
-        CRUD::with('roleAssignments.role');
+        CRUD::with(['roleAssignments.role', 'zoneLeadership.zone']);
         CRUD::column('name');
         CRUD::column('email')->type('email');
         CRUD::column('phone')->type('phone');
@@ -72,7 +72,7 @@ class UserCrudController extends CrudController
 
     protected function setupShowOperation(): void
     {
-        CRUD::with(['roleAssignments.role', 'roleAssignments.branch']);
+        CRUD::with(['roleAssignments.role', 'roleAssignments.branch', 'zoneLeadership.zone']);
         CRUD::removeAllColumns();
         CRUD::column('name');
         CRUD::column('email')->type('email');
@@ -85,12 +85,18 @@ class UserCrudController extends CrudController
             ->limit(1000)
             ->value(fn (User $user): string => $this->activeRoleNames($user));
         CRUD::column('scope')
-            ->label('Scope (Attached Branches)')
+            ->label('Scope (Attached Branches / Zones)')
             ->type('text')
             ->limit(1000)
             ->value(fn (User $user): string => $user->roleAssignments
                 ->where('is_active', true)
                 ->map(fn (UserRole $assignment): string => $assignment->branch?->name ?? 'Church-wide')
+                ->merge($user->zoneLeadership
+                    ->filter(fn ($appointment): bool => $appointment->is_active
+                        && $appointment->zone?->is_active
+                        && $appointment->start_date->lessThanOrEqualTo(today())
+                        && ($appointment->end_date === null || $appointment->end_date->greaterThanOrEqualTo(today())))
+                    ->map(fn ($appointment): string => 'Zone: '.$appointment->zone->name))
                 ->unique()
                 ->join('; ') ?: 'No active scope');
     }
@@ -100,6 +106,7 @@ class UserCrudController extends CrudController
         return $user->roleAssignments
             ->where('is_active', true)
             ->map(fn (UserRole $assignment): string => $assignment->role?->name ?? 'Unknown role')
+            ->when($user->hasActiveZoneLeadership(), fn ($roles) => $roles->push('Zone Leader'))
             ->unique()
             ->join('; ') ?: 'No active role assignments';
     }
@@ -114,7 +121,7 @@ class UserCrudController extends CrudController
         CRUD::setValidation(UserRequest::class);
         $this->setupUserFields();
         CRUD::field('role_id')->type('select_from_array')->options(Role::query()->orderBy('name')->pluck('name', 'id')->all())->label('Initial role');
-        CRUD::field('branch_ids')->type('clearable_multiselect')->options(Branch::query()->orderBy('name')->pluck('name', 'id')->all())->label('Branch scope')->hint('Select one or more branches. Leave empty for church-wide access.');
+        CRUD::field('branch_ids')->type('clearable_multiselect')->options(Branch::query()->orderBy('name')->pluck('name', 'id')->all())->label('Branch scope')->hint('Select one or more branches or leave empty for church-wide roles. For Zone Leader, leave this empty and create a Zone Leader appointment after saving.');
     }
 
     private function setupUserFields(): void

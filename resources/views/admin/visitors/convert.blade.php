@@ -12,6 +12,16 @@
                             <div class="col-12 col-md-4"><label class="form-label" for="first_name">First name</label><input id="first_name" name="first_name" value="{{ old('first_name', $firstName) }}" class="form-control" required></div>
                             <div class="col-12 col-md-4"><label class="form-label" for="middle_name">Middle name</label><input id="middle_name" name="middle_name" value="{{ old('middle_name', $middleName) }}" class="form-control"></div>
                             <div class="col-12 col-md-4"><label class="form-label" for="last_name">Last name</label><input id="last_name" name="last_name" value="{{ old('last_name', $lastName) }}" class="form-control" required></div>
+                            <div class="col-12">
+                                <label class="form-label" for="branch_leader_id">Branch leader</label>
+                                <select id="branch_leader_id" name="branch_leader_id" class="form-select @error('branch_leader_id') is-invalid @enderror" required>
+                                    <option value="">Select branch leader</option>
+                                    @foreach ($branchLeaders as $leader)
+                                        <option value="{{ $leader->id }}" @selected(old('branch_leader_id') === $leader->id)>{{ $leader->member->full_name }} — {{ $leader->leadershipTitle->name }}</option>
+                                    @endforeach
+                                </select>
+                                @error('branch_leader_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
                             <div class="col-12 col-md-6"><label class="form-label" for="phone">Phone</label><input id="phone" name="phone" value="{{ old('phone', $visitor->phone) }}" class="form-control"></div>
                             <div class="col-12 col-md-6"><label class="form-label" for="email">Email</label><input id="email" name="email" type="email" value="{{ old('email', $visitor->email) }}" class="form-control"></div>
                             <div class="col-12 col-md-6"><label class="form-label" for="date_joined">Date joined</label><input id="date_joined" name="date_joined" type="date" value="{{ old('date_joined', today()->toDateString()) }}" class="form-control" required></div>

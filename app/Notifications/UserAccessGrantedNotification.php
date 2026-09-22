@@ -33,12 +33,15 @@ class UserAccessGrantedNotification extends Notification implements ShouldQueue
         $role = $this->assignment->role;
         $branch = $this->assignment->branch;
         $applicationName = Church::query()->value('name') ?? config('app.name');
+        $scope = $role->name === 'Zone Leader' && $branch === null
+            ? 'Assigned zone appointments'
+            : ($branch?->name ?? 'Church-wide');
 
         return (new MailMessage)
             ->subject('Your '.$applicationName.' sign-in access')
             ->greeting('Hello '.$notifiable->name.',')
             ->line('An account has been created for you with the role: '.$role->name.'.')
-            ->line('Access scope: '.($branch?->name ?? 'Church-wide').'.')
+            ->line('Access scope: '.$scope.'.')
             ->line('Sign in using your email and password, or your phone number and PIN if one was provided.')
             ->line('For security, passwords and PINs are not included in this email. Contact your administrator if you have not received your credentials through a secure channel.')
             ->action('Sign in', route('backpack.auth.login'))

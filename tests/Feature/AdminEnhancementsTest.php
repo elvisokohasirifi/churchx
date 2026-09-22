@@ -4,9 +4,11 @@ use App\MemberBranchStatus;
 use App\Models\Branch;
 use App\Models\BranchDepartment;
 use App\Models\BranchDepartmentMember;
+use App\Models\BranchLeader;
 use App\Models\Church;
 use App\Models\Department;
 use App\Models\DepartmentRole;
+use App\Models\LeadershipTitle;
 use App\Models\Member;
 use App\Models\MemberAttendance;
 use App\Models\MemberBranch;
@@ -68,6 +70,65 @@ it('bulk assigns unique branch departments and department members', function () 
     $this->post(route('admin.bulk.department-members'), $memberPayload)->assertRedirect();
     $this->post(route('admin.bulk.department-members'), $memberPayload)->assertRedirect();
     expect(BranchDepartmentMember::query()->count())->toBe(1);
+});
+
+it('bulk assigns branch leaders and shepherds to members', function () {
+    $administrator = User::factory()->create();
+    assignRole($administrator, 'App Administrator');
+    $branch = Branch::factory()->create();
+    $firstLeaderMember = Member::factory()->create();
+    $secondLeaderMember = Member::factory()->create();
+    $shepherd = Member::factory()->create();
+    $members = Member::factory()->count(2)->create();
+    foreach (collect([$firstLeaderMember, $secondLeaderMember, $shepherd])->merge($members) as $member) {
+        MemberBranch::query()->create(['member_id' => $member->id, 'branch_id' => $branch->id, 'joined_date' => today(), 'is_primary' => true, 'status' => MemberBranchStatus::Active]);
+    }
+    $title = LeadershipTitle::query()->create(['name' => 'Bulk Assignment Pastor']);
+    BranchLeader::query()->create(['branch_id' => $branch->id, 'member_id' => $firstLeaderMember->id, 'leadership_title_id' => $title->id, 'start_date' => today()->subYear(), 'is_active' => true]);
+    $secondLeader = BranchLeader::query()->create(['branch_id' => $branch->id, 'member_id' => $secondLeaderMember->id, 'leadership_title_id' => $title->id, 'start_date' => today(), 'is_active' => true]);
+
+    $leaderResponse = $this->actingAs($administrator, 'backpack')->post(route('admin.bulk.branch-leader-members'), [
+        'branch_id' => $branch->id,
+        'branch_leader_id' => $secondLeader->id,
+        'member_ids' => $members->modelKeys(),
+    ]);
+    $shepherdResponse = $this->post(route('admin.bulk.shepherd-members'), [
+        'branch_id' => $branch->id,
+        'shepherd_id' => $shepherd->id,
+        'member_ids' => $members->modelKeys(),
+    ]);
+
+    $leaderResponse->assertRedirect()->assertSessionHasNoErrors();
+    $shepherdResponse->assertRedirect()->assertSessionHasNoErrors();
+    expect(Member::query()->whereKey($members->modelKeys())->where('branch_leader_id', $secondLeader->id)->count())->toBe(2)
+        ->and(Member::query()->whereKey($members->modelKeys())->where('shepherd_id', $shepherd->id)->count())->toBe(2);
+});
+
+it('rejects bulk branch leader assignments across branches', function () {
+    $administrator = User::factory()->create();
+    assignRole($administrator, 'App Administrator');
+    $memberBranch = Branch::factory()->create();
+    $otherBranch = Branch::factory()->create();
+    $member = Member::factory()->create();
+    $leaderMember = Member::factory()->create();
+    MemberBranch::query()->create(['member_id' => $member->id, 'branch_id' => $memberBranch->id, 'joined_date' => today(), 'is_primary' => true, 'status' => MemberBranchStatus::Active]);
+    MemberBranch::query()->create(['member_id' => $leaderMember->id, 'branch_id' => $otherBranch->id, 'joined_date' => today(), 'is_primary' => true, 'status' => MemberBranchStatus::Active]);
+    $otherLeader = BranchLeader::query()->create([
+        'branch_id' => $otherBranch->id,
+        'member_id' => $leaderMember->id,
+        'leadership_title_id' => LeadershipTitle::query()->create(['name' => 'Other Branch Pastor'])->id,
+        'start_date' => today(),
+        'is_active' => true,
+    ]);
+
+    $response = $this->actingAs($administrator, 'backpack')->post(route('admin.bulk.branch-leader-members'), [
+        'branch_id' => $memberBranch->id,
+        'branch_leader_id' => $otherLeader->id,
+        'member_ids' => [$member->id],
+    ]);
+
+    $response->assertUnprocessable();
+    expect($member->fresh()->branch_leader_id)->toBeNull();
 });
 
 it('validates a branch and department pair before inserting a duplicate', function () {
@@ -160,9 +221,22 @@ it('defaults a service date to the nearest sunday', function (string $currentDat
 it('renders the bulk assignment and attendance register screens', function () {
     $administrator = User::factory()->create();
     assignRole($administrator, 'App Administrator');
-    Branch::factory()->create();
+    $branch = Branch::factory()->create();
+    $leaderMember = Member::factory()->create();
+    MemberBranch::query()->create(['member_id' => $leaderMember->id, 'branch_id' => $branch->id, 'joined_date' => today(), 'is_primary' => true, 'status' => MemberBranchStatus::Active]);
+    BranchLeader::query()->create([
+        'branch_id' => $branch->id,
+        'member_id' => $leaderMember->id,
+        'leadership_title_id' => LeadershipTitle::query()->create(['name' => 'Bulk Screen Pastor'])->id,
+        'start_date' => today(),
+        'is_active' => true,
+    ]);
 
-    $this->actingAs($administrator, 'backpack')->get(route('admin.bulk-assignments'))->assertOk()->assertSee('Bulk Assignments');
+    $this->actingAs($administrator, 'backpack')->get(route('admin.bulk-assignments'))
+        ->assertOk()
+        ->assertSee('Bulk Assignments')
+        ->assertSee('Members to branch leader')
+        ->assertSee('Members to shepherd');
     $this->get(route('admin.attendance.register'))->assertOk()->assertSee('Attendance Register');
 });
 

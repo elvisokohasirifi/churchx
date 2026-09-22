@@ -7,6 +7,7 @@ use App\Models\Concerns\HasUuid;
 use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -16,7 +17,7 @@ class Member extends Model
     use CrudTrait, HasFactory, HasUuid, SoftDeletes;
 
     protected $fillable = [
-        'membership_number', 'first_name', 'middle_name', 'last_name', 'phone', 'alternative_phone', 'email',
+        'membership_number', 'shepherd_id', 'branch_leader_id', 'first_name', 'middle_name', 'last_name', 'phone', 'alternative_phone', 'email',
         'address', 'date_of_birth', 'gender', 'marital_status', 'occupation', 'highest_education', 'profile_photo',
         'date_joined', 'membership_status', 'notes',
     ];
@@ -28,6 +29,21 @@ class Member extends Model
     public function user(): HasOne
     {
         return $this->hasOne(User::class);
+    }
+
+    public function shepherd(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'shepherd_id');
+    }
+
+    public function shepherdedMembers(): HasMany
+    {
+        return $this->hasMany(self::class, 'shepherd_id');
+    }
+
+    public function branchLeader(): BelongsTo
+    {
+        return $this->belongsTo(BranchLeader::class);
     }
 
     public function branchHistory(): HasMany

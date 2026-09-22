@@ -70,7 +70,7 @@ class UserRoleCrudController extends CrudController
         CRUD::setValidation(UserRoleRequest::class);
         CRUD::field('user_id')->type('select')->entity('user')->model(User::class)->attribute('name')->label('User');
         CRUD::field('role_id')->type('select')->entity('role')->model(Role::class)->attribute('name')->label('Role');
-        CRUD::field('branch_ids')->type('clearable_multiselect')->options(Branch::query()->orderBy('name')->pluck('name', 'id')->all())->label('Branch scope')->hint('Select one or more branches. Leave empty for a church-wide role.');
+        CRUD::field('branch_ids')->type('clearable_multiselect')->options(Branch::query()->orderBy('name')->pluck('name', 'id')->all())->label('Branch scope')->hint('Select branches or leave empty for church-wide roles. Zone Leader access comes from a Zone Leader appointment.');
         CRUD::field('is_active')->type('boolean')->default(true);
     }
 
@@ -94,7 +94,7 @@ class UserRoleCrudController extends CrudController
 
         CRUD::field('user_id')->type('select')->entity('user')->model(User::class)->attribute('name')->label('User');
         CRUD::field('role_id')->type('select')->entity('role')->model(Role::class)->attribute('name')->label('Role');
-        CRUD::field('branch_ids')->type('clearable_multiselect')->options(Branch::query()->orderBy('name')->pluck('name', 'id')->all())->value($selectedBranchIds)->label('Branch scope')->hint('Select one or more branches. Leave empty for a church-wide role.');
+        CRUD::field('branch_ids')->type('clearable_multiselect')->options(Branch::query()->orderBy('name')->pluck('name', 'id')->all())->value($selectedBranchIds)->label('Branch scope')->hint('Select branches or leave empty for church-wide roles. Zone Leader access comes from a Zone Leader appointment.');
         CRUD::field('is_active')->type('boolean')->default(true);
     }
 

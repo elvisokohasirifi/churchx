@@ -6,6 +6,7 @@ use App\Http\Requests\MemberRequest;
 use App\MemberBranchStatus;
 use App\MemberStatus;
 use App\Models\Branch;
+use App\Models\BranchLeader;
 use App\Models\Member;
 use App\Models\MemberBranch;
 use App\PermissionCode;
@@ -44,6 +45,7 @@ class MemberCrudController extends CrudController
         CRUD::setModel(Member::class);
         CRUD::setRoute(config('backpack.base.route_prefix').'/members');
         CRUD::setEntityNameStrings('member', 'members');
+        CRUD::with(['branchLeader.member', 'shepherd']);
 
         $access = app(BranchAccessService::class);
         $user = backpack_user();
@@ -67,8 +69,11 @@ class MemberCrudController extends CrudController
         CRUD::column('full_name')->label('Name');
         CRUD::column('phone');
         CRUD::column('email')->type('email');
+        CRUD::column('branch_leader_id')->type('select')->entity('branchLeader')->model(BranchLeader::class)->attribute('display_name')->label('Branch leader');
+        CRUD::column('shepherd')->type('relationship')->attribute('full_name')->label('Shepherd');
         CRUD::column('membership_status')->type('enum')->label('Status');
         CRUD::column('date_joined')->type('date');
+        CRUD::addButtonFromView('top', 'member_csv_import', 'member_csv_import', 'end');
         CRUD::addButtonFromView('line', 'transfer', 'member_transfer', 'end');
     }
 
@@ -80,8 +85,44 @@ class MemberCrudController extends CrudController
     protected function setupCreateOperation(): void
     {
         CRUD::setValidation(MemberRequest::class);
-        $branchIds = app(BranchAccessService::class)->accessibleBranchIds(backpack_user(), PermissionCode::MembersCreate);
+        $permission = $this->crud->getCurrentOperation() === 'update' ? PermissionCode::MembersUpdate : PermissionCode::MembersCreate;
+        $branchIds = app(BranchAccessService::class)->accessibleBranchIds(backpack_user(), $permission);
         CRUD::field('primary_branch_id')->type('select_from_array')->options(Branch::query()->whereIn('id', $branchIds)->orderBy('name')->pluck('name', 'id')->all())->fake(true)->label('Primary branch');
+        $branchLeaders = BranchLeader::query()
+            ->with(['branch:id,name', 'member:id,first_name,middle_name,last_name', 'leadershipTitle:id,name'])
+            ->whereIn('branch_id', $branchIds)
+            ->where('is_active', true)
+            ->whereDate('start_date', '<=', today())
+            ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', today()))
+            ->orderBy('start_date')
+            ->orderBy('id')
+            ->get();
+        $currentMemberId = $this->crud->getCurrentEntryId();
+        $currentBranchId = $currentMemberId
+            ? Member::query()->find($currentMemberId)?->primaryBranchMembership()->value('branch_id')
+            : null;
+        CRUD::field('branch_leader_id')
+            ->type('member_branch_leader')
+            ->leaders($branchLeaders->map(fn (BranchLeader $leader): array => [
+                'id' => $leader->id,
+                'branch_id' => $leader->branch_id,
+                'label' => $leader->member->full_name.' — '.$leader->branch->name.' ('.$leader->leadershipTitle->name.')',
+            ])->all())
+            ->branchId($currentBranchId)
+            ->label('Branch leader')
+            ->hint('Defaults to the first active leader of the selected branch. The branch leader must be different from the shepherd.');
+        $shepherds = Member::query()
+            ->with('primaryBranchMembership.branch:id,name')
+            ->whereHas('primaryBranchMembership', fn ($query) => $query->whereIn('branch_id', $branchIds))
+            ->when($this->crud->getCurrentEntryId(), fn ($query, $memberId) => $query->whereKeyNot($memberId))
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get()
+            ->mapWithKeys(fn (Member $member): array => [
+                $member->id => $member->full_name.' — '.($member->primaryBranchMembership?->branch?->name ?? 'No branch'),
+            ])
+            ->all();
+        CRUD::field('shepherd_id')->type('select_from_array')->options($shepherds)->allows_null(true)->label('Shepherd')->hint('The member who provides pastoral oversight. Shepherds must belong to the same primary branch.');
         CRUD::field('first_name');
         CRUD::field('middle_name');
         CRUD::field('last_name');

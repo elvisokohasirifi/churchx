@@ -4,15 +4,40 @@ namespace App\Http\Requests;
 
 use App\MemberStatus;
 use App\Models\Branch;
+use App\Models\BranchLeader;
 use App\Models\Member;
 use App\Models\User;
 use App\PermissionCode;
 use App\Services\BranchAccessService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class MemberRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        if (filled($this->input('branch_leader_id'))) {
+            return;
+        }
+
+        $member = $this->route('id') ? Member::query()->find($this->route('id')) : null;
+        $branchId = $this->input('primary_branch_id')
+            ?: $member?->primaryBranchMembership()->value('branch_id');
+        $branchLeaderId = BranchLeader::query()
+            ->where('branch_id', $branchId)
+            ->where('is_active', true)
+            ->whereDate('start_date', '<=', today())
+            ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', today()))
+            ->orderBy('start_date')
+            ->orderBy('id')
+            ->value('id');
+
+        if ($branchLeaderId !== null) {
+            $this->merge(['branch_leader_id' => $branchLeaderId]);
+        }
+    }
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -41,6 +66,8 @@ class MemberRequest extends FormRequest
     {
         return [
             'primary_branch_id' => [$this->route('id') ? 'nullable' : 'required', 'uuid', 'exists:branches,id'],
+            'shepherd_id' => ['nullable', 'uuid', 'exists:members,id'],
+            'branch_leader_id' => ['nullable', 'uuid', 'exists:branch_leaders,id'],
             'first_name' => ['required', 'string', 'max:255'],
             'middle_name' => ['nullable', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
@@ -60,13 +87,66 @@ class MemberRequest extends FormRequest
         ];
     }
 
+    /** @return array<int, callable(Validator): void> */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            if ($validator->errors()->hasAny(['primary_branch_id', 'branch_leader_id'])) {
+                return;
+            }
+
+            $member = $this->route('id') ? Member::query()->find($this->route('id')) : null;
+            $branchId = $this->input('primary_branch_id')
+                ?: $member?->primaryBranchMembership()->value('branch_id');
+            $activeBranchLeaders = BranchLeader::query()
+                ->where('branch_id', $branchId)
+                ->where('is_active', true)
+                ->whereDate('start_date', '<=', today())
+                ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', today()));
+            $branchLeader = filled($this->input('branch_leader_id'))
+                ? (clone $activeBranchLeaders)->whereKey($this->input('branch_leader_id'))->first()
+                : null;
+
+            if (blank($this->input('branch_leader_id')) && (clone $activeBranchLeaders)->exists()) {
+                $validator->errors()->add('branch_leader_id', 'Select an active branch leader from the member’s primary branch.');
+            } elseif (filled($this->input('branch_leader_id')) && $branchLeader === null) {
+                $validator->errors()->add('branch_leader_id', 'Select an active branch leader from the member’s primary branch.');
+            }
+
+            $shepherdId = $this->input('shepherd_id');
+
+            if (blank($shepherdId)) {
+                return;
+            }
+
+            if ($branchLeader?->member_id === $shepherdId) {
+                $validator->errors()->add('branch_leader_id', 'The branch leader must be different from the shepherd.');
+
+                return;
+            }
+
+            if ($member?->getKey() === $shepherdId) {
+                $validator->errors()->add('shepherd_id', 'A member cannot be their own shepherd.');
+
+                return;
+            }
+
+            if ($branchId !== null && ! Member::query()->whereKey($shepherdId)->whereHas(
+                'primaryBranchMembership',
+                fn ($query) => $query->where('branch_id', $branchId),
+            )->exists()) {
+                $validator->errors()->add('shepherd_id', 'The shepherd must belong to the same primary branch as the member.');
+            }
+        }];
+    }
+
     /**
      * Get the validation attributes that apply to the request.
      */
     public function attributes(): array
     {
         return [
-            //
+            'branch_leader_id' => 'branch leader',
         ];
     }
 

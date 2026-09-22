@@ -5,6 +5,7 @@ namespace App\Services;
 use App\MemberBranchStatus;
 use App\MemberStatus;
 use App\Models\Branch;
+use App\Models\BranchLeader;
 use App\Models\Member;
 use App\Models\MemberBranch;
 use App\Models\User;
@@ -30,6 +31,20 @@ class VisitorConversionService
             }
 
             $targetBranch = $branch ?? $lockedVisitor->branch;
+            $branchLeader = BranchLeader::query()
+                ->whereKey(Arr::get($attributes, 'branch_leader_id'))
+                ->where('branch_id', $targetBranch->id)
+                ->where('is_active', true)
+                ->whereDate('start_date', '<=', today())
+                ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', today()))
+                ->first();
+
+            if ($branchLeader === null) {
+                throw ValidationException::withMessages([
+                    'branch_leader_id' => 'Select an active leader from the visitor’s branch.',
+                ]);
+            }
+
             $names = preg_split('/\s+/', trim($lockedVisitor->name)) ?: [];
             $member = Member::query()->create(array_merge([
                 'membership_number' => $this->numbers->generate($targetBranch),
@@ -44,7 +59,7 @@ class VisitorConversionService
                 'date_joined' => today(),
                 'membership_status' => MemberStatus::NewConvert,
             ], Arr::only($attributes, [
-                'first_name', 'middle_name', 'last_name', 'phone', 'email', 'address', 'date_of_birth', 'gender',
+                'branch_leader_id', 'first_name', 'middle_name', 'last_name', 'phone', 'email', 'address', 'date_of_birth', 'gender',
                 'marital_status', 'occupation', 'highest_education', 'date_joined', 'membership_status', 'notes',
             ])));
 
