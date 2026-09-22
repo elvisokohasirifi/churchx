@@ -1,0 +1,2 @@
+@extends(backpack_view('blank'))
+@section('content')<h2>Member Report</h2><div class="row g-3">@forelse($counts as $status=>$total)<div class="col-6 col-md-3"><div class="card"><div class="card-body"><div class="text-muted">{{ str($status)->headline() }}</div><div class="display-6">{{ $total }}</div></div></div></div>@empty<div class="alert alert-info">No member data is available.</div>@endforelse</div>@endsection

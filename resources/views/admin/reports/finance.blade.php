@@ -1,0 +1,4 @@
+@extends(backpack_view('blank'))
+@section('content')
+<h2>Financial Report</h2><form class="row g-2 mb-3"><div class="col-md-5"><select class="form-select" name="branch_id"><option value="">All accessible branches</option>@foreach($branches as $branch)<option value="{{ $branch->id }}" @selected($branchId===$branch->id)>{{ $branch->name }}</option>@endforeach</select></div><div class="col"><button class="btn btn-primary">Apply</button></div></form><div class="row g-3"><div class="col-md-6"><div class="card"><div class="card-body"><div class="text-muted">Completed income</div><div class="display-6">{{ number_format((float)$totals['income'],2) }}</div></div></div></div><div class="col-md-6"><div class="card"><div class="card-body"><div class="text-muted">Paid expenses</div><div class="display-6">{{ number_format((float)$totals['expenses'],2) }}</div></div></div></div></div><p class="text-muted mt-3">Transfers are excluded from income and expense totals.</p>
+@endsection
