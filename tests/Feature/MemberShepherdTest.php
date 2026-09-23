@@ -14,6 +14,31 @@ beforeEach(function () {
     $this->seed(RoleAndPermissionSeeder::class);
 });
 
+it('shows the shepherd full name instead of the shepherd id on the member listing', function () {
+    $branch = Branch::factory()->create();
+    $shepherd = Member::factory()->create(['first_name' => 'Grace', 'middle_name' => 'Ama', 'last_name' => 'Mensah']);
+    $member = Member::factory()->create(['shepherd_id' => $shepherd->id]);
+    MemberBranch::query()->create([
+        'member_id' => $member->id,
+        'branch_id' => $branch->id,
+        'joined_date' => today(),
+        'is_primary' => true,
+        'status' => MemberBranchStatus::Active,
+    ]);
+    $administrator = User::factory()->create();
+    assignRole($administrator, 'App Administrator');
+
+    $response = $this->actingAs($administrator, 'backpack')->post(route('members.search'), [
+        'draw' => 1,
+        'start' => 0,
+        'length' => 25,
+    ]);
+
+    $response->assertOk()
+        ->assertSee('Grace Ama Mensah')
+        ->assertDontSee($shepherd->id);
+});
+
 it('backfills initial members when the first branch leader is appointed', function () {
     $branch = Branch::factory()->create();
     $initialMember = Member::factory()->create();
@@ -77,6 +102,40 @@ it('defaults a new member to the first active branch leader', function () {
     $member = Member::query()->where('first_name', 'Defaulted')->firstOrFail();
     $response->assertRedirect()->assertSessionHasNoErrors();
     expect($member->branch_leader_id)->toBe($firstLeader->id);
+});
+
+it('allows an explicitly empty branch leader when active leaders exist', function () {
+    $branch = Branch::factory()->create();
+    $leaderMember = Member::factory()->create();
+    MemberBranch::query()->create([
+        'member_id' => $leaderMember->id,
+        'branch_id' => $branch->id,
+        'joined_date' => today(),
+        'is_primary' => true,
+        'status' => MemberBranchStatus::Active,
+    ]);
+    BranchLeader::query()->create([
+        'branch_id' => $branch->id,
+        'member_id' => $leaderMember->id,
+        'leadership_title_id' => LeadershipTitle::query()->create(['name' => 'Optional Leader'])->id,
+        'start_date' => today(),
+        'is_active' => true,
+    ]);
+    $admin = User::factory()->create();
+    assignRole($admin, 'App Administrator');
+
+    $response = $this->actingAs($admin, 'backpack')->post(route('members.store'), [
+        'primary_branch_id' => $branch->id,
+        'branch_leader_id' => '',
+        'first_name' => 'Unassigned',
+        'last_name' => 'Member',
+        'membership_status' => MemberStatus::Member->value,
+    ]);
+
+    $response->assertRedirect()->assertSessionHasNoErrors();
+    $member = Member::query()->where('first_name', 'Unassigned')->where('last_name', 'Member')->firstOrFail();
+
+    expect($member->branch_leader_id)->toBeNull();
 });
 
 it('creates a member with a distinct branch leader and shepherd', function () {
@@ -162,7 +221,81 @@ it('assigns a same-branch member as a shepherd', function () {
     $response->assertSessionHasNoErrors();
     expect($member->fresh()->shepherd->is($shepherd))->toBeTrue()
         ->and($member->fresh()->branchLeader->is($branchLeader))->toBeTrue()
-        ->and($shepherd->fresh()->shepherdedMembers->contains($member))->toBeTrue();
+        ->and($shepherd->fresh()->shepherdedMembers->contains($member))->toBeTrue()
+        ->and($shepherd->fresh()->is_shepherd)->toBeTrue()
+        ->and($shepherd->fresh()->shepherd_id)->toBe($branchLeaderMember->id);
+});
+
+it('assigns a designated shepherd to the active branch leader', function () {
+    $branch = Branch::factory()->create();
+    $leaderMember = Member::factory()->create();
+    $shepherd = Member::factory()->create(['is_shepherd' => true]);
+    foreach ([$leaderMember, $shepherd] as $branchMember) {
+        MemberBranch::query()->create([
+            'member_id' => $branchMember->id,
+            'branch_id' => $branch->id,
+            'joined_date' => today(),
+            'is_primary' => true,
+            'status' => MemberBranchStatus::Active,
+        ]);
+    }
+
+    BranchLeader::query()->create([
+        'branch_id' => $branch->id,
+        'member_id' => $leaderMember->id,
+        'leadership_title_id' => LeadershipTitle::query()->create(['name' => 'Shepherd Supervisor'])->id,
+        'start_date' => today(),
+        'is_active' => true,
+    ]);
+
+    expect($shepherd->fresh()->shepherd_id)->toBe($leaderMember->id);
+});
+
+it('uses the shepherds assigned branch leader when a branch has multiple leaders', function () {
+    $branch = Branch::factory()->create();
+    $firstLeaderMember = Member::factory()->create();
+    $assignedLeaderMember = Member::factory()->create();
+    foreach ([$firstLeaderMember, $assignedLeaderMember] as $leaderMember) {
+        MemberBranch::query()->create([
+            'member_id' => $leaderMember->id,
+            'branch_id' => $branch->id,
+            'joined_date' => today(),
+            'is_primary' => true,
+            'status' => MemberBranchStatus::Active,
+        ]);
+    }
+    $title = LeadershipTitle::query()->create(['name' => 'Multiple Leader Supervisor']);
+    BranchLeader::query()->create([
+        'branch_id' => $branch->id,
+        'member_id' => $firstLeaderMember->id,
+        'leadership_title_id' => $title->id,
+        'start_date' => today()->subYear(),
+        'is_active' => true,
+    ]);
+    $assignedLeader = BranchLeader::query()->create([
+        'branch_id' => $branch->id,
+        'member_id' => $assignedLeaderMember->id,
+        'leadership_title_id' => $title->id,
+        'start_date' => today(),
+        'is_active' => true,
+    ]);
+    $administrator = User::factory()->create();
+    assignRole($administrator, 'App Administrator');
+
+    $response = $this->actingAs($administrator, 'backpack')->post(route('members.store'), [
+        'primary_branch_id' => $branch->id,
+        'branch_leader_id' => $assignedLeader->id,
+        'is_shepherd' => true,
+        'first_name' => 'Assigned',
+        'last_name' => 'Shepherd',
+        'membership_status' => MemberStatus::Member->value,
+    ]);
+
+    $response->assertRedirect()->assertSessionHasNoErrors();
+    $shepherd = Member::query()->where('first_name', 'Assigned')->where('last_name', 'Shepherd')->firstOrFail();
+    expect($shepherd->is_shepherd)->toBeTrue()
+        ->and($shepherd->branch_leader_id)->toBe($assignedLeader->id)
+        ->and($shepherd->shepherd_id)->toBe($assignedLeaderMember->id);
 });
 
 it('rejects a shepherd from another branch', function () {

@@ -10,10 +10,13 @@ use App\PermissionCode;
 use App\Services\BranchAccessService;
 use App\Services\ChurchContext;
 use App\Services\FinanceReportService;
+use App\Services\MemberAudienceFilter;
 use App\Services\OperationalReportService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class ReportsController extends Controller
@@ -45,6 +48,69 @@ class ReportsController extends Controller
         $ids = $access->accessibleBranchIds(backpack_user(), PermissionCode::MembersView);
 
         return view('admin.reports.members', ['counts' => Member::query()->selectRaw('membership_status, count(*) as total')->whereHas('branchHistory', fn ($query) => $query->whereIn('branch_id', $ids)->where('is_primary', true)->whereNull('left_date'))->groupBy('membership_status')->pluck('total', 'membership_status')]);
+    }
+
+    public function memberFilter(Request $request, BranchAccessService $access, MemberAudienceFilter $memberFilter): View
+    {
+        $filterRequested = $request->filled('filter_field')
+            || $request->filled('filter_operator')
+            || $request->filled('filter_condition');
+        $validated = $request->validate([
+            'branch_id' => ['nullable', 'uuid'],
+            'q' => ['nullable', 'string', 'max:100'],
+            'filter_field' => [Rule::requiredIf($filterRequested), 'nullable', 'string', Rule::in(array_keys(MemberAudienceFilter::FIELDS))],
+            'filter_operator' => [Rule::requiredIf($filterRequested), 'nullable', 'string', Rule::in(array_keys(MemberAudienceFilter::OPERATORS))],
+            'filter_condition' => ['nullable', 'string', 'max:500'],
+        ]);
+        $branchIds = $access->accessibleBranchIds(backpack_user(), PermissionCode::MembersView);
+        abort_if($branchIds->isEmpty() && ! $access->allows(backpack_user(), PermissionCode::MembersView), 403);
+        $branchId = $validated['branch_id'] ?? null;
+        abort_if($branchId !== null && ! $branchIds->contains($branchId), 403);
+        $filterField = $validated['filter_field'] ?? null;
+        $filterOperator = $validated['filter_operator'] ?? null;
+        $filterCondition = $validated['filter_condition'] ?? null;
+
+        if ($filterOperator !== null && ! MemberAudienceFilter::conditionIsValid($filterOperator, $filterCondition)) {
+            $message = in_array($filterOperator, MemberAudienceFilter::RANGE_OPERATORS, true)
+                ? 'Enter exactly two comma-separated values.'
+                : (in_array($filterOperator, MemberAudienceFilter::LIST_OPERATORS, true)
+                    ? 'Enter one or more comma-separated values.'
+                    : 'Enter a filter condition.');
+
+            throw ValidationException::withMessages(['filter_condition' => $message]);
+        }
+
+        $search = isset($validated['q']) ? trim($validated['q']) : null;
+        $query = Member::query()
+            ->with([
+                'primaryBranchMembership.branch:id,name',
+                'branchLeader.member:id,first_name,middle_name,last_name',
+                'shepherd:id,first_name,middle_name,last_name',
+            ])
+            ->whereHas('primaryBranchMembership', fn ($query) => $query
+                ->whereIn('branch_id', $branchIds)
+                ->when($branchId !== null, fn ($query) => $query->where('branch_id', $branchId)))
+            ->when($search !== null && $search !== '', fn ($query) => $query->where(function ($query) use ($search): void {
+                $query->where('membership_number', 'like', "%{$search}%")
+                    ->orWhere('first_name', 'like', "%{$search}%")
+                    ->orWhere('middle_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
+            }));
+        $memberFilter->apply($query, $filterField, $filterOperator, $filterCondition);
+
+        return view('admin.reports.member-filter', [
+            'members' => $query->orderBy('first_name')->orderBy('last_name')->orderBy('id')->paginate(50)->withQueryString(),
+            'branches' => Branch::query()->whereIn('id', $branchIds)->orderBy('name')->get(),
+            'branchId' => $branchId,
+            'fields' => MemberAudienceFilter::FIELDS,
+            'operators' => MemberAudienceFilter::OPERATORS,
+            'filterField' => $filterField,
+            'filterOperator' => $filterOperator,
+            'filterCondition' => $filterCondition,
+            'search' => $search,
+        ]);
     }
 
     public function attendanceRecords(Request $request, OperationalReportService $reports, BranchAccessService $access): View

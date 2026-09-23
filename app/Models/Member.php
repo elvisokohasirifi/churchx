@@ -17,13 +17,14 @@ class Member extends Model
     use CrudTrait, HasFactory, HasUuid, SoftDeletes;
 
     protected $fillable = [
-        'membership_number', 'shepherd_id', 'branch_leader_id', 'first_name', 'middle_name', 'last_name', 'phone', 'alternative_phone', 'email',
+        'membership_number', 'shepherd_id', 'branch_leader_id', 'is_shepherd', 'first_name', 'middle_name', 'last_name', 'phone', 'alternative_phone', 'email',
         'address', 'date_of_birth', 'gender', 'marital_status', 'occupation', 'highest_education', 'profile_photo',
         'date_joined', 'membership_status', 'notes',
     ];
 
     protected $attributes = [
         'membership_status' => MemberStatus::Member->value,
+        'is_shepherd' => false,
     ];
 
     public function user(): HasOne
@@ -102,6 +103,7 @@ class Member extends Model
             'date_of_birth' => 'date',
             'date_joined' => 'date',
             'membership_status' => MemberStatus::class,
+            'is_shepherd' => 'boolean',
         ];
     }
 }

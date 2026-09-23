@@ -29,6 +29,17 @@
                         <div class="card h-100">
                             <div class="card-header"><h2 class="card-title">Upload CSV</h2></div>
                             <div class="card-body">
+                                @isset($branchOptions)
+                                    <label class="form-label" for="default-branch-id">Default branch</label>
+                                    <select id="default-branch-id" name="default_branch_id" class="form-select @error('default_branch_id') is-invalid @enderror">
+                                        <option value="">Use each row's primary_branch_code</option>
+                                        @foreach ($branchOptions as $branchOptionId => $branchOptionName)
+                                            <option value="{{ $branchOptionId }}" @selected(old('default_branch_id') === $branchOptionId)>{{ $branchOptionName }}</option>
+                                        @endforeach
+                                    </select>
+                                    <div class="form-hint mt-2 mb-3">Required for compact files that use LOCATION instead of primary_branch_code.</div>
+                                    @error('default_branch_id')<div class="invalid-feedback mb-3">{{ $message }}</div>@enderror
+                                @endisset
                                 <label class="form-label" for="csv-file">CSV file</label>
                                 <input id="csv-file" name="csv_file" class="form-control @error('csv_file') is-invalid @enderror" type="file" accept=".csv,text/csv" required>
                                 <div class="form-hint mt-2">Maximum file size: 5 MB. Maximum rows: 2,000.</div>

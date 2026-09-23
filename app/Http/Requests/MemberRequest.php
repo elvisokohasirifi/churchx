@@ -17,7 +17,7 @@ class MemberRequest extends FormRequest
 {
     protected function prepareForValidation(): void
     {
-        if (filled($this->input('branch_leader_id'))) {
+        if (array_key_exists('branch_leader_id', $this->all())) {
             return;
         }
 
@@ -68,6 +68,7 @@ class MemberRequest extends FormRequest
             'primary_branch_id' => [$this->route('id') ? 'nullable' : 'required', 'uuid', 'exists:branches,id'],
             'shepherd_id' => ['nullable', 'uuid', 'exists:members,id'],
             'branch_leader_id' => ['nullable', 'uuid', 'exists:branch_leaders,id'],
+            'is_shepherd' => ['sometimes', 'boolean'],
             'first_name' => ['required', 'string', 'max:255'],
             'middle_name' => ['nullable', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
@@ -107,9 +108,7 @@ class MemberRequest extends FormRequest
                 ? (clone $activeBranchLeaders)->whereKey($this->input('branch_leader_id'))->first()
                 : null;
 
-            if (blank($this->input('branch_leader_id')) && (clone $activeBranchLeaders)->exists()) {
-                $validator->errors()->add('branch_leader_id', 'Select an active branch leader from the member’s primary branch.');
-            } elseif (filled($this->input('branch_leader_id')) && $branchLeader === null) {
+            if (filled($this->input('branch_leader_id')) && $branchLeader === null) {
                 $validator->errors()->add('branch_leader_id', 'Select an active branch leader from the member’s primary branch.');
             }
 
@@ -119,7 +118,9 @@ class MemberRequest extends FormRequest
                 return;
             }
 
-            if ($branchLeader?->member_id === $shepherdId) {
+            $isShepherd = $this->boolean('is_shepherd') || ($member?->is_shepherd ?? false);
+
+            if ($branchLeader?->member_id === $shepherdId && ! $isShepherd) {
                 $validator->errors()->add('branch_leader_id', 'The branch leader must be different from the shepherd.');
 
                 return;

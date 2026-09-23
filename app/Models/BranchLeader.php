@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasUuid;
+use App\Services\ShepherdHierarchyService;
 use Backpack\CRUD\app\Models\Traits\CrudTrait;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,14 +24,14 @@ class BranchLeader extends Model
                 ->whereDate('start_date', '<=', today())
                 ->where(fn ($query) => $query->whereNull('end_date')->orWhereDate('end_date', '>=', today()));
 
-            if ((clone $currentLeaders)->count() !== 1 || ! (clone $currentLeaders)->whereKey($leader->id)->exists()) {
-                return;
+            if ((clone $currentLeaders)->count() === 1 && (clone $currentLeaders)->whereKey($leader->id)->exists()) {
+                Member::query()
+                    ->whereNull('branch_leader_id')
+                    ->whereHas('primaryBranchMembership', fn ($query) => $query->where('branch_id', $leader->branch_id))
+                    ->update(['branch_leader_id' => $leader->id]);
             }
 
-            Member::query()
-                ->whereNull('branch_leader_id')
-                ->whereHas('primaryBranchMembership', fn ($query) => $query->where('branch_id', $leader->branch_id))
-                ->update(['branch_leader_id' => $leader->id]);
+            app(ShepherdHierarchyService::class)->syncBranch($leader->branch_id);
         });
     }
 

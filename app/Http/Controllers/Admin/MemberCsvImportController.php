@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\MemberCsvImportRequest;
+use App\Models\Branch;
 use App\Models\User;
 use App\PermissionCode;
 use App\Services\AuditLogService;
@@ -27,7 +28,15 @@ class MemberCsvImportController extends Controller
             'storeRoute' => route('admin.members.import.store'),
             'sampleRoute' => route('admin.members.import.sample'),
             'backRoute' => route('members.index'),
+            'branchOptions' => Branch::query()
+                ->whereIn('id', $this->branchIds($user, $branchAccess))
+                ->orderBy('name')
+                ->pluck('name', 'id'),
             'columns' => [
+                'Compact membership files with LOCATION, NAME, DATE OF BIRTH, SHEPHERD, and CONTACT columns are supported. Select the branch that all rows belong to before uploading.',
+                'Files using NAMES, CONTACTS, BIRTHDAY, DEPARTMENT, LOCATION, STATUS, and ACTIVE /INACTIVE are also supported. Departments and branch assignments are created as needed.',
+                'For compact files, LOCATION is saved as the member address and shepherd names are matched to another member in the file or an existing member.',
+                'Birth dates without a year are retained in notes because the exact year is unknown.',
                 'primary_branch_code is required. For the member name, provide either name or both first_name and last_name.',
                 'A combined name is split into first name, middle name(s), and last name automatically.',
                 'membership_number is optional; leave it blank to generate one automatically.',
@@ -46,7 +55,11 @@ class MemberCsvImportController extends Controller
     ): RedirectResponse {
         $user = backpack_user();
         abort_unless($user instanceof User, 403);
-        $count = $importer->import($request->file('csv_file'), $this->branchIds($user, $branchAccess));
+        $count = $importer->import(
+            $request->file('csv_file'),
+            $this->branchIds($user, $branchAccess),
+            $request->string('default_branch_id')->toString() ?: null,
+        );
         $audit->record('members.imported', $user, context: ['count' => $count], request: $request);
 
         return redirect()->route('members.index')->with('success', "{$count} members imported successfully.");

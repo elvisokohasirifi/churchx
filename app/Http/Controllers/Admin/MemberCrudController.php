@@ -13,6 +13,7 @@ use App\PermissionCode;
 use App\Services\AuditLogService;
 use App\Services\BranchAccessService;
 use App\Services\MembershipNumberGenerator;
+use App\Services\ShepherdHierarchyService;
 use Backpack\CRUD\app\Http\Controllers\CrudController;
 use Backpack\CRUD\app\Http\Controllers\Operations\CreateOperation;
 use Backpack\CRUD\app\Http\Controllers\Operations\DeleteOperation;
@@ -70,7 +71,8 @@ class MemberCrudController extends CrudController
         CRUD::column('phone');
         CRUD::column('email')->type('email');
         CRUD::column('branch_leader_id')->type('select')->entity('branchLeader')->model(BranchLeader::class)->attribute('display_name')->label('Branch leader');
-        CRUD::column('shepherd')->type('relationship')->attribute('full_name')->label('Shepherd');
+        CRUD::column('shepherd_id')->type('select')->entity('shepherd')->model(Member::class)->attribute('full_name')->label('Shepherd');
+        CRUD::column('is_shepherd')->type('boolean')->label('Is shepherd');
         CRUD::column('membership_status')->type('enum')->label('Status');
         CRUD::column('date_joined')->type('date');
         CRUD::addButtonFromView('top', 'member_csv_import', 'member_csv_import', 'end');
@@ -110,7 +112,7 @@ class MemberCrudController extends CrudController
             ])->all())
             ->branchId($currentBranchId)
             ->label('Branch leader')
-            ->hint('Defaults to the first active leader of the selected branch. The branch leader must be different from the shepherd.');
+            ->hint('Optional. Defaults to the first active leader of the selected branch when creating a member, but may be cleared. The branch leader must be different from the shepherd.');
         $shepherds = Member::query()
             ->with('primaryBranchMembership.branch:id,name')
             ->whereHas('primaryBranchMembership', fn ($query) => $query->whereIn('branch_id', $branchIds))
@@ -123,6 +125,7 @@ class MemberCrudController extends CrudController
             ])
             ->all();
         CRUD::field('shepherd_id')->type('select_from_array')->options($shepherds)->allows_null(true)->label('Shepherd')->hint('The member who provides pastoral oversight. Shepherds must belong to the same primary branch.');
+        CRUD::field('is_shepherd')->type('switch')->default(false)->label('Is a shepherd')->hint('Shepherds are supervised by their active branch leader.');
         CRUD::field('first_name');
         CRUD::field('middle_name');
         CRUD::field('last_name');
@@ -174,6 +177,16 @@ class MemberCrudController extends CrudController
                 'is_primary' => true,
                 'status' => MemberBranchStatus::Active,
             ]);
+            $hierarchy = app(ShepherdHierarchyService::class);
+            if ($member->is_shepherd) {
+                $hierarchy->sync($member);
+            }
+            if ($member->shepherd_id !== null) {
+                $selectedShepherd = Member::query()->find($member->shepherd_id);
+                if ($selectedShepherd !== null) {
+                    $hierarchy->markAndSync($selectedShepherd);
+                }
+            }
             app(AuditLogService::class)->record('member.created', backpack_user(), $member);
 
             return $member;
@@ -199,6 +212,16 @@ class MemberCrudController extends CrudController
 
         $before = $member->getOriginal();
         $member->update($data);
+        $hierarchy = app(ShepherdHierarchyService::class);
+        if ($member->is_shepherd) {
+            $hierarchy->sync($member);
+        }
+        if ($member->shepherd_id !== null) {
+            $selectedShepherd = Member::query()->find($member->shepherd_id);
+            if ($selectedShepherd !== null) {
+                $hierarchy->markAndSync($selectedShepherd);
+            }
+        }
         app(AuditLogService::class)->record('member.updated', backpack_user(), $member, ['before' => $before, 'after' => $member->getChanges()]);
         $this->data['entry'] = $this->crud->entry = $member;
         \Alert::success(trans('backpack::crud.update_success'))->flash();

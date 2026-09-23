@@ -2,6 +2,7 @@
 
 use App\IncomeStatus;
 use App\MemberBranchStatus;
+use App\MemberStatus;
 use App\Models\AttendanceSummary;
 use App\Models\Branch;
 use App\Models\BranchLeader;
@@ -36,6 +37,64 @@ it('shows member attendance records only for accessible branches', function () {
     $response->assertOk()->assertSee('Visible Member')->assertDontSee('Hidden Member');
     expect($response->viewData('rows'))->toHaveCount(1)
         ->and($response->viewData('rows')->first()['present'])->toBe(1);
+});
+
+it('filters members by accessible branch and an allow-listed where clause', function () {
+    $visibleBranch = Branch::factory()->create(['name' => 'Visible Branch']);
+    $hiddenBranch = Branch::factory()->create(['name' => 'Hidden Branch']);
+    $administrator = User::factory()->create();
+    assignRole($administrator, 'Branch Administrator', $visibleBranch);
+    memberInBranch($visibleBranch, ['first_name' => 'Ama', 'last_name' => 'Visible', 'membership_status' => MemberStatus::Member]);
+    memberInBranch($visibleBranch, ['first_name' => 'Esi', 'last_name' => 'Inactive', 'membership_status' => MemberStatus::Inactive]);
+    memberInBranch($hiddenBranch, ['first_name' => 'Hidden', 'last_name' => 'Member', 'membership_status' => MemberStatus::Member]);
+
+    $response = $this->actingAs($administrator, 'backpack')->get(route('admin.reports.member-filter', [
+        'branch_id' => $visibleBranch->id,
+        'filter_field' => 'membership_status',
+        'filter_operator' => '=',
+        'filter_condition' => 'member',
+    ]));
+
+    $response->assertOk()
+        ->assertSee('Ama Visible')
+        ->assertDontSee('Esi Inactive')
+        ->assertDontSee('Hidden Member');
+    expect($response->viewData('members')->total())->toBe(1);
+});
+
+it('forbids filtering members through a branch outside the user scope', function () {
+    $visibleBranch = Branch::factory()->create();
+    $hiddenBranch = Branch::factory()->create();
+    $administrator = User::factory()->create();
+    assignRole($administrator, 'Branch Administrator', $visibleBranch);
+
+    $this->actingAs($administrator, 'backpack')
+        ->get(route('admin.reports.member-filter', ['branch_id' => $hiddenBranch->id]))
+        ->assertForbidden();
+});
+
+it('rejects fields outside the member filter allow-list', function () {
+    $administrator = User::factory()->create();
+    assignRole($administrator, 'App Administrator');
+
+    $this->actingAs($administrator, 'backpack')
+        ->from(route('admin.reports.member-filter'))
+        ->get(route('admin.reports.member-filter', [
+            'filter_field' => 'first_name) or 1 = 1',
+            'filter_operator' => '=',
+            'filter_condition' => 'Ama',
+        ]))
+        ->assertRedirect(route('admin.reports.member-filter'))
+        ->assertSessionHasErrors('filter_field');
+});
+
+it('forbids the member filter report without member view access', function () {
+    $financeOfficer = User::factory()->create();
+    assignRole($financeOfficer, 'Finance Officer');
+
+    $this->actingAs($financeOfficer, 'backpack')
+        ->get(route('admin.reports.member-filter'))
+        ->assertForbidden();
 });
 
 it('combines attendance from every branch led by the same leader', function () {

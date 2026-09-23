@@ -15,6 +15,7 @@ use App\Models\MemberBranch;
 use App\Models\Service;
 use App\Models\ServiceType;
 use App\Models\User;
+use App\ServiceScope;
 use Database\Seeders\RoleAndPermissionSeeder;
 
 beforeEach(function () {
@@ -179,6 +180,22 @@ it('shows configurable asset references and service choices', function () {
         ->assertSee('1 Church Avenue');
 });
 
+it('renders enum values in the services listing', function () {
+    $administrator = User::factory()->create();
+    assignRole($administrator, 'App Administrator');
+    Service::factory()->create([
+        'name' => 'Enum-safe Service',
+        'scope' => ServiceScope::ChurchWide,
+        'branch_id' => null,
+    ]);
+
+    $this->actingAs($administrator, 'backpack')
+        ->post(route('services.search'), ['start' => 0, 'length' => 25])
+        ->assertOk()
+        ->assertSee('Enum-safe Service')
+        ->assertSee('church_wide');
+});
+
 it('manages service types and only accepts active service type options', function () {
     $administrator = User::factory()->create();
     assignRole($administrator, 'App Administrator');
@@ -265,10 +282,43 @@ it('groups dropdown reference pages under a single setup sidebar section', funct
 
     $response = $this->actingAs($administrator, 'backpack')->get(route('admin.dashboard'));
 
-    $response->assertSeeInOrder(['Setup', 'Church Settings']);
-    foreach (['church-settings', 'service-types', 'departments', 'department-roles', 'leadership-titles', 'household-relationships', 'payment-methods', 'giving-types', 'funds', 'financial-accounts', 'expense-types', 'asset-types', 'asset-conditions', 'asset-statuses'] as $path) {
+    $response->assertSeeInOrder([
+        'Setup',
+        backpack_url('asset-conditions'),
+        backpack_url('branch-leaders'),
+        backpack_url('branches'),
+        backpack_url('church-settings'),
+        backpack_url('zone-leaders'),
+        backpack_url('zones'),
+    ]);
+    foreach (['church-settings', 'zones', 'branches', 'zone-leaders', 'branch-leaders', 'service-types', 'departments', 'department-roles', 'leadership-titles', 'household-relationships', 'payment-methods', 'giving-types', 'funds', 'financial-accounts', 'expense-types', 'asset-types', 'asset-conditions', 'asset-statuses'] as $path) {
         expect(substr_count($response->getContent(), backpack_url($path)))->toBe(1);
     }
+});
+
+it('orders sidebar sections alphabetically while keeping utility links at the bottom', function () {
+    $administrator = User::factory()->create();
+    assignRole($administrator, 'App Administrator');
+
+    $this->actingAs($administrator, 'backpack')
+        ->get(route('admin.dashboard'))
+        ->assertSeeInOrder([
+            'Dashboard',
+            'Access Control',
+            'Assets',
+            'Broadcasts',
+            'Bulk Assignments',
+            'Events',
+            'Files & Logs',
+            'Finance',
+            'Ministries',
+            'People',
+            'Reports',
+            'Services & Attendance',
+            'Setup',
+            'Ask Data',
+            'Help Center',
+        ]);
 });
 
 it('allows only app and church administrators to access setup pages', function (string $roleName, bool $allowed) {
@@ -304,7 +354,7 @@ it('groups users and role management under access control', function () {
 
     $response = $this->actingAs($administrator, 'backpack')->get(route('admin.dashboard'));
 
-    $response->assertSeeInOrder(['Access Control', 'Users', 'Roles', 'Role Assignments']);
+    $response->assertSeeInOrder(['Access Control', 'Role Assignments', 'Roles', 'Users']);
     foreach (['users', 'roles', 'role-assignments'] as $path) {
         expect(substr_count($response->getContent(), backpack_url($path)))->toBe(1);
     }

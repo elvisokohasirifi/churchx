@@ -116,6 +116,7 @@ Route::group([
     Route::get('reports/finance', [ReportsController::class, 'finance'])->name('admin.reports.finance');
     Route::get('reports/attendance', [ReportsController::class, 'attendance'])->name('admin.reports.attendance');
     Route::get('reports/members', [ReportsController::class, 'members'])->name('admin.reports.members');
+    Route::get('reports/member-filter', [ReportsController::class, 'memberFilter'])->name('admin.reports.member-filter');
     Route::get('reports/attendance-records', [ReportsController::class, 'attendanceRecords'])->name('admin.reports.attendance-records');
     Route::get('reports/attendance-leaders', [ReportsController::class, 'attendanceLeaderRanking'])->name('admin.reports.attendance-leaders');
     Route::get('reports/attendance-churches', [ReportsController::class, 'attendanceChurchRanking'])->name('admin.reports.attendance-churches');

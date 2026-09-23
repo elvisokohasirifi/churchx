@@ -12,7 +12,7 @@
         data-member-branch-leader
         data-current-branch="{{ $field['branchId'] ?? '' }}"
     >
-        <option value="">No active branch leader</option>
+        <option value="">No branch leader</option>
         @foreach ($field['leaders'] as $leader)
             <option value="{{ $leader['id'] }}" data-branch="{{ $leader['branch_id'] }}" @selected($selectedLeaderId === $leader['id'])>{{ $leader['label'] }}</option>
         @endforeach
@@ -38,7 +38,7 @@
                 });
 
                 const selectedOption = leaderSelect.selectedOptions[0];
-                if (!selectedOption || selectedOption.value === '' || selectedOption.hidden) {
+                if (!selectedOption || selectedOption.hidden || (selectedOption.value === '' && branchSelect)) {
                     leaderSelect.value = leaderOptions.find((option) => !option.hidden)?.value || '';
                 }
             };

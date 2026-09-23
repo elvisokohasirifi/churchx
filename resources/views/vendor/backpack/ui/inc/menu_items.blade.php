@@ -36,29 +36,54 @@
     $canViewSetup = $menuUser?->hasActiveRole('App Administrator') || $menuUser?->hasActiveRole('Church Administrator');
     $canUseAskData = $canViewAttendance || $hasAccess(\App\PermissionCode::MembersView) || $canViewFinancialReports;
 @endphp
-@if (backpack_user()?->can('attendance.view') || backpack_user()?->can('attendance.capture'))
-    <x-backpack::menu-dropdown title="Services & Attendance" icon="la la-calendar-check">
-        <x-backpack::menu-dropdown-item title="Services" icon="la la-calendar" :link="backpack_url('services')" />
-        <x-backpack::menu-dropdown-item title="Capture Attendance" icon="la la-clipboard-check" :link="backpack_url('attendance/capture')" />
-        <x-backpack::menu-dropdown-item title="Attendance Register" icon="la la-list-check" :link="backpack_url('attendance/register')" />
+@if ($canViewAccessControl)
+    <x-backpack::menu-dropdown title="Access Control" icon="la la-user-shield">
+        @if ($canManageRoles)
+            <x-backpack::menu-dropdown-item title="Role Assignments" icon="la la-user-check" :link="backpack_url('role-assignments')" />
+            <x-backpack::menu-dropdown-item title="Roles" icon="la la-id-badge" :link="backpack_url('roles')" />
+        @endif
+        @if ($canViewUsers)
+            <x-backpack::menu-dropdown-item title="Users" icon="la la-users" :link="backpack_url('users')" />
+        @endif
+    </x-backpack::menu-dropdown>
+@endif
+@if ($canViewAssets)
+    <x-backpack::menu-item title="Assets" icon="la la-boxes" :link="backpack_url('assets')" />
+@endif
+@if (backpack_user()?->can('broadcasts.view'))
+    <x-backpack::menu-item title="Broadcasts" icon="la la-bullhorn" :link="backpack_url('broadcasts/compose')" />
+@endif
+@if ($canViewDepartments || $canViewGroups)
+    <x-backpack::menu-item title="Bulk Assignments" icon="la la-tasks" :link="backpack_url('bulk-assignments')" />
+@endif
+@if (backpack_user()?->can('events.view'))
+    <x-backpack::menu-item title="Events" icon="la la-calendar-alt" :link="backpack_url('events')" />
+@endif
+@if ($menuUser?->hasActiveRole('App Administrator'))
+    <x-backpack::menu-dropdown title="Files & Logs" icon="la la-folder-open">
+        <x-backpack::menu-dropdown-item title="Activity Log" icon="la la-history" :link="backpack_url('activity-logs')" />
+        <x-backpack::menu-dropdown-item title="Backups" icon="la la-database" :link="backpack_url('backups')" />
+        <x-backpack::menu-dropdown-item title="Error Logs" icon="la la-exclamation-triangle" :link="backpack_url('error-logs')" />
+        <x-backpack::menu-dropdown-item title="File System" icon="la la-folder" :link="backpack_url('file-system')" />
+        <x-backpack::menu-dropdown-item title="System Audit Logs" icon="la la-user-shield" :link="backpack_url('audit-logs')" />
     </x-backpack::menu-dropdown>
 @endif
 @if ($canViewIncome || $canCaptureOfferings || $canViewExpenses || $canApproveExpenses || $canTransferAccounts || $canViewFinancialReports)
     <x-backpack::menu-dropdown title="Finance" icon="la la-coins">
+        @if ($canTransferAccounts)
+            <x-backpack::menu-dropdown-item title="Account Transfers" icon="la la-exchange-alt" :link="backpack_url('account-transfers')" />
+        @endif
+        @if ($canApproveExpenses)
+            <x-backpack::menu-dropdown-item title="Approval Queue" icon="la la-check-circle" :link="backpack_url('expense-approvals/queue')" />
+        @endif
+        @if ($canViewExpenses)
+            <x-backpack::menu-dropdown-item title="Expenses" icon="la la-receipt" :link="backpack_url('expenses')" />
+        @endif
         @if ($canViewIncome)
             <x-backpack::menu-dropdown-item title="Income" icon="la la-arrow-down" :link="backpack_url('income')" />
         @endif
         @if ($canCaptureOfferings)
             <x-backpack::menu-dropdown-item title="Offerings" icon="la la-hand-holding-usd" :link="backpack_url('offerings')" />
-        @endif
-        @if ($canViewExpenses)
-            <x-backpack::menu-dropdown-item title="Expenses" icon="la la-receipt" :link="backpack_url('expenses')" />
-        @endif
-        @if ($canApproveExpenses)
-            <x-backpack::menu-dropdown-item title="Approval Queue" icon="la la-check-circle" :link="backpack_url('expense-approvals/queue')" />
-        @endif
-        @if ($canTransferAccounts)
-            <x-backpack::menu-dropdown-item title="Account Transfers" icon="la la-exchange-alt" :link="backpack_url('account-transfers')" />
         @endif
         @if ($canViewFinancialReports)
             <x-backpack::menu-dropdown-item title="Pledges" icon="la la-handshake" :link="backpack_url('pledges')" />
@@ -69,111 +94,95 @@
     <x-backpack::menu-dropdown title="Ministries" icon="la la-sitemap">
         @if ($canViewDepartments)
             <x-backpack::menu-dropdown-item title="Branch Departments" icon="la la-code-branch" :link="backpack_url('branch-departments')" />
-            <x-backpack::menu-dropdown-item title="Department Members" icon="la la-user-friends" :link="backpack_url('department-members')" />
         @endif
         @if ($canViewGroups)
-            <x-backpack::menu-dropdown-item title="Cells / Groups" icon="la la-users" :link="backpack_url('groups')" />
             <x-backpack::menu-dropdown-item title="Cell / Group Members" icon="la la-user-plus" :link="backpack_url('group-members')" />
+            <x-backpack::menu-dropdown-item title="Cells / Groups" icon="la la-users" :link="backpack_url('groups')" />
+        @endif
+        @if ($canViewDepartments)
+            <x-backpack::menu-dropdown-item title="Department Members" icon="la la-user-friends" :link="backpack_url('department-members')" />
         @endif
     </x-backpack::menu-dropdown>
-    <x-backpack::menu-item title="Bulk Assignments" icon="la la-tasks" :link="backpack_url('bulk-assignments')" />
 @endif
-@if (backpack_user()?->can('events.view'))
-    <x-backpack::menu-item title="Events" icon="la la-calendar-alt" :link="backpack_url('events')" />
-@endif
-@if (backpack_user()?->can('broadcasts.view'))
-    <x-backpack::menu-item title="Broadcasts" icon="la la-bullhorn" :link="backpack_url('broadcasts/compose')" />
-@endif
-@if ($canViewAssets)
-    <x-backpack::menu-item title="Assets" icon="la la-boxes" :link="backpack_url('assets')" />
+@if (backpack_user() && (backpack_user()->can('members.view') || app(\App\Services\BranchAccessService::class)->accessibleBranchIds(backpack_user(), \App\PermissionCode::MembersView)->isNotEmpty()))
+    <x-backpack::menu-dropdown title="People" icon="la la-address-book">
+        <x-backpack::menu-dropdown-item title="Households" icon="la la-home" :link="backpack_url('households')" />
+        <x-backpack::menu-dropdown-item title="Members" icon="la la-user-friends" :link="backpack_url('members')" />
+        <x-backpack::menu-dropdown-item title="Visitors" icon="la la-user-clock" :link="backpack_url('visitors')" />
+    </x-backpack::menu-dropdown>
 @endif
 @if ($canViewAttendance || $canViewFinancialReports || $hasAccess(\App\PermissionCode::MembersView))
     <x-backpack::menu-dropdown title="Reports" icon="la la-chart-pie">
         @if ($canViewAttendance)
-            <x-backpack::menu-dropdown-item title="Attendance Summary" icon="la la-chart-bar" :link="backpack_url('reports/attendance')" />
-            <x-backpack::menu-dropdown-item title="Attendance Records" icon="la la-clipboard-list" :link="backpack_url('reports/attendance-records')" />
-            <x-backpack::menu-dropdown-item title="Attendance by Leader" icon="la la-user-tie" :link="backpack_url('reports/attendance-leaders')" />
-            <x-backpack::menu-dropdown-item title="Attendance by Church" icon="la la-church" :link="backpack_url('reports/attendance-churches')" />
             <x-backpack::menu-dropdown-item title="Absence Follow-up" icon="la la-phone" :link="backpack_url('reports/absence-follow-up')" />
+            <x-backpack::menu-dropdown-item title="Attendance by Church" icon="la la-church" :link="backpack_url('reports/attendance-churches')" />
+            <x-backpack::menu-dropdown-item title="Attendance by Leader" icon="la la-user-tie" :link="backpack_url('reports/attendance-leaders')" />
+            <x-backpack::menu-dropdown-item title="Attendance Records" icon="la la-clipboard-list" :link="backpack_url('reports/attendance-records')" />
+            <x-backpack::menu-dropdown-item title="Attendance Summary" icon="la la-chart-bar" :link="backpack_url('reports/attendance')" />
+        @endif
+        @if ($hasAccess(\App\PermissionCode::MembersView))
+            <x-backpack::menu-dropdown-item title="Filter Members" icon="la la-filter" :link="backpack_url('reports/member-filter')" />
         @endif
         @if ($canViewFinancialReports)
-            <x-backpack::menu-dropdown-item title="Giving by Service" icon="la la-hand-holding-usd" :link="backpack_url('reports/giving-records')" />
-            <x-backpack::menu-dropdown-item title="Giving by Leader" icon="la la-trophy" :link="backpack_url('reports/giving-leaders')" />
             <x-backpack::menu-dropdown-item title="Financial Report" icon="la la-chart-line" :link="backpack_url('reports/finance')" />
+            <x-backpack::menu-dropdown-item title="Giving by Leader" icon="la la-trophy" :link="backpack_url('reports/giving-leaders')" />
+            <x-backpack::menu-dropdown-item title="Giving by Service" icon="la la-hand-holding-usd" :link="backpack_url('reports/giving-records')" />
         @endif
         @if ($hasAccess(\App\PermissionCode::MembersView))
             <x-backpack::menu-dropdown-item title="Member Report" icon="la la-users" :link="backpack_url('reports/members')" />
         @endif
     </x-backpack::menu-dropdown>
 @endif
-@if ($menuUser?->hasActiveRole('App Administrator'))
-    <x-backpack::menu-dropdown title="Files & Logs" icon="la la-folder-open">
-        <x-backpack::menu-dropdown-item title="Activity Log" icon="la la-history" :link="backpack_url('activity-logs')" />
-        <x-backpack::menu-dropdown-item title="System Audit Logs" icon="la la-user-shield" :link="backpack_url('audit-logs')" />
-        <x-backpack::menu-dropdown-item title="Error Logs" icon="la la-exclamation-triangle" :link="backpack_url('error-logs')" />
-        <x-backpack::menu-dropdown-item title="File System" icon="la la-folder" :link="backpack_url('file-system')" />
-        <x-backpack::menu-dropdown-item title="Backups" icon="la la-database" :link="backpack_url('backups')" />
+@if (backpack_user()?->can('attendance.view') || backpack_user()?->can('attendance.capture'))
+    <x-backpack::menu-dropdown title="Services & Attendance" icon="la la-calendar-check">
+        <x-backpack::menu-dropdown-item title="Attendance Register" icon="la la-list-check" :link="backpack_url('attendance/register')" />
+        <x-backpack::menu-dropdown-item title="Capture Attendance" icon="la la-clipboard-check" :link="backpack_url('attendance/capture')" />
+        <x-backpack::menu-dropdown-item title="Services" icon="la la-calendar" :link="backpack_url('services')" />
     </x-backpack::menu-dropdown>
-@endif
-@if ($canViewZones)
-    <x-backpack::menu-item title="Zones" icon="la la-layer-group" :link="backpack_url('zones')" />
-    <x-backpack::menu-item title="Branches" icon="la la-code-branch" :link="backpack_url('branches')" />
-@endif
-@if ($canViewAccessControl)
-    <x-backpack::menu-dropdown title="Access Control" icon="la la-user-shield">
-        @if ($canViewUsers)
-            <x-backpack::menu-dropdown-item title="Users" icon="la la-users" :link="backpack_url('users')" />
-        @endif
-        @if ($canManageRoles)
-            <x-backpack::menu-dropdown-item title="Roles" icon="la la-id-badge" :link="backpack_url('roles')" />
-            <x-backpack::menu-dropdown-item title="Role Assignments" icon="la la-user-check" :link="backpack_url('role-assignments')" />
-        @endif
-    </x-backpack::menu-dropdown>
-@endif
-@if (backpack_user() && (backpack_user()->can('members.view') || app(\App\Services\BranchAccessService::class)->accessibleBranchIds(backpack_user(), \App\PermissionCode::MembersView)->isNotEmpty()))
-    <x-backpack::menu-dropdown title="People" icon="la la-address-book">
-        <x-backpack::menu-dropdown-item title="Members" icon="la la-user-friends" :link="backpack_url('members')" />
-        <x-backpack::menu-dropdown-item title="Visitors" icon="la la-user-clock" :link="backpack_url('visitors')" />
-        <x-backpack::menu-dropdown-item title="Households" icon="la la-home" :link="backpack_url('households')" />
-    </x-backpack::menu-dropdown>
-@endif
-@if ($canViewZones)
-    <x-backpack::menu-item title="Zone Leaders" icon="la la-users-cog" :link="backpack_url('zone-leaders')" />
-    <x-backpack::menu-item title="Branch Leaders" icon="la la-user-tie" :link="backpack_url('branch-leaders')" />
 @endif
 @if ($canViewSetup)
     <x-backpack::menu-dropdown title="Setup" icon="la la-cogs">
+        @if ($canViewAssets)
+            <x-backpack::menu-dropdown-item title="Asset Conditions" icon="la la-clipboard-check" :link="backpack_url('asset-conditions')" />
+            <x-backpack::menu-dropdown-item title="Asset Statuses" icon="la la-toggle-on" :link="backpack_url('asset-statuses')" />
+            <x-backpack::menu-dropdown-item title="Asset Types" icon="la la-tags" :link="backpack_url('asset-types')" />
+        @endif
+        @if ($canViewZones)
+            <x-backpack::menu-dropdown-item title="Branch Leaders" icon="la la-user-tie" :link="backpack_url('branch-leaders')" />
+            <x-backpack::menu-dropdown-item title="Branches" icon="la la-code-branch" :link="backpack_url('branches')" />
+        @endif
         @if ($canViewChurchSettings)
             <x-backpack::menu-dropdown-item title="Church Settings" icon="la la-church" :link="backpack_url('church-settings')" />
         @endif
-        @if ($canViewAttendance)
-            <x-backpack::menu-dropdown-item title="Service Types" icon="la la-calendar-day" :link="backpack_url('service-types')" />
-        @endif
         @if ($canViewDepartments)
-            <x-backpack::menu-dropdown-item title="Departments" icon="la la-building" :link="backpack_url('departments')" />
             <x-backpack::menu-dropdown-item title="Department Roles" icon="la la-id-badge" :link="backpack_url('department-roles')" />
-        @endif
-        @if ($menuUser?->can('branches.manage'))
-            <x-backpack::menu-dropdown-item title="Leadership Titles" icon="la la-medal" :link="backpack_url('leadership-titles')" />
-        @endif
-        @if ($menuUser?->can('roles.manage'))
-            <x-backpack::menu-dropdown-item title="Household Relationships" icon="la la-people-arrows" :link="backpack_url('household-relationships')" />
-        @endif
-        @if ($canViewIncome)
-            <x-backpack::menu-dropdown-item title="Payment Methods" icon="la la-credit-card" :link="backpack_url('payment-methods')" />
-            <x-backpack::menu-dropdown-item title="Giving Types" icon="la la-tags" :link="backpack_url('giving-types')" />
-            <x-backpack::menu-dropdown-item title="Funds" icon="la la-piggy-bank" :link="backpack_url('funds')" />
-        @endif
-        @if ($canViewFinancialReports)
-            <x-backpack::menu-dropdown-item title="Financial Accounts" icon="la la-university" :link="backpack_url('financial-accounts')" />
+            <x-backpack::menu-dropdown-item title="Departments" icon="la la-building" :link="backpack_url('departments')" />
         @endif
         @if ($canViewExpenses)
             <x-backpack::menu-dropdown-item title="Expense Types" icon="la la-list-alt" :link="backpack_url('expense-types')" />
         @endif
-        @if ($canViewAssets)
-            <x-backpack::menu-dropdown-item title="Asset Types" icon="la la-tags" :link="backpack_url('asset-types')" />
-            <x-backpack::menu-dropdown-item title="Asset Conditions" icon="la la-clipboard-check" :link="backpack_url('asset-conditions')" />
-            <x-backpack::menu-dropdown-item title="Asset Statuses" icon="la la-toggle-on" :link="backpack_url('asset-statuses')" />
+        @if ($canViewFinancialReports)
+            <x-backpack::menu-dropdown-item title="Financial Accounts" icon="la la-university" :link="backpack_url('financial-accounts')" />
+        @endif
+        @if ($canViewIncome)
+            <x-backpack::menu-dropdown-item title="Funds" icon="la la-piggy-bank" :link="backpack_url('funds')" />
+            <x-backpack::menu-dropdown-item title="Giving Types" icon="la la-tags" :link="backpack_url('giving-types')" />
+        @endif
+        @if ($menuUser?->can('roles.manage'))
+            <x-backpack::menu-dropdown-item title="Household Relationships" icon="la la-people-arrows" :link="backpack_url('household-relationships')" />
+        @endif
+        @if ($menuUser?->can('branches.manage'))
+            <x-backpack::menu-dropdown-item title="Leadership Titles" icon="la la-medal" :link="backpack_url('leadership-titles')" />
+        @endif
+        @if ($canViewIncome)
+            <x-backpack::menu-dropdown-item title="Payment Methods" icon="la la-credit-card" :link="backpack_url('payment-methods')" />
+        @endif
+        @if ($canViewAttendance)
+            <x-backpack::menu-dropdown-item title="Service Types" icon="la la-calendar-day" :link="backpack_url('service-types')" />
+        @endif
+        @if ($canViewZones)
+            <x-backpack::menu-dropdown-item title="Zone Leaders" icon="la la-users-cog" :link="backpack_url('zone-leaders')" />
+            <x-backpack::menu-dropdown-item title="Zones" icon="la la-layer-group" :link="backpack_url('zones')" />
         @endif
     </x-backpack::menu-dropdown>
 @endif

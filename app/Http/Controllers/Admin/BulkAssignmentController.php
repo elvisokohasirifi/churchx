@@ -17,6 +17,7 @@ use App\Models\HouseholdRelationship;
 use App\Models\Member;
 use App\PermissionCode;
 use App\Services\BranchAccessService;
+use App\Services\ShepherdHierarchyService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -149,7 +150,7 @@ class BulkAssignmentController extends Controller
         return back()->with('success', 'Members assigned to the household.');
     }
 
-    public function branchLeaderMembers(Request $request, BranchAccessService $access): RedirectResponse
+    public function branchLeaderMembers(Request $request, BranchAccessService $access, ShepherdHierarchyService $hierarchy): RedirectResponse
     {
         $branchIds = $access->accessibleBranchIds(backpack_user(), PermissionCode::MembersUpdate);
         $data = $request->validate([
@@ -170,16 +171,18 @@ class BulkAssignmentController extends Controller
 
         $hasLeaderAsShepherd = Member::query()
             ->whereIn('id', $data['member_ids'])
+            ->where('is_shepherd', false)
             ->where('shepherd_id', $branchLeader->member_id)
             ->exists();
         abort_if($hasLeaderAsShepherd, 422, 'The branch leader must be different from each selected member’s shepherd.');
 
         Member::query()->whereIn('id', $data['member_ids'])->update(['branch_leader_id' => $branchLeader->id]);
+        $hierarchy->syncBranch($data['branch_id']);
 
         return back()->with('success', 'Branch leader assigned to the selected members.');
     }
 
-    public function shepherdMembers(Request $request, BranchAccessService $access): RedirectResponse
+    public function shepherdMembers(Request $request, BranchAccessService $access, ShepherdHierarchyService $hierarchy): RedirectResponse
     {
         $branchIds = $access->accessibleBranchIds(backpack_user(), PermissionCode::MembersUpdate);
         $data = $request->validate([
@@ -201,12 +204,17 @@ class BulkAssignmentController extends Controller
 
             $conflictsWithLeader = Member::query()
                 ->whereIn('id', $data['member_ids'])
+                ->where('is_shepherd', false)
                 ->whereHas('branchLeader', fn ($query) => $query->where('member_id', $shepherdId))
                 ->exists();
             abort_if($conflictsWithLeader, 422, 'The shepherd must be different from each selected member’s branch leader.');
         }
 
         Member::query()->whereIn('id', $data['member_ids'])->update(['shepherd_id' => $shepherdId]);
+
+        if ($shepherdId !== null) {
+            $hierarchy->markAndSync(Member::query()->findOrFail($shepherdId));
+        }
 
         return back()->with('success', $shepherdId === null
             ? 'Shepherd assignments cleared for the selected members.'

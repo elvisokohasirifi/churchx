@@ -11,20 +11,35 @@ class CsvFileReader
     /**
      * @return list<array{line:int, data:array<string, string|null>}>
      */
-    public function read(UploadedFile $file, array $requiredHeaders, int $maximumRows = 2000): array
+    public function read(UploadedFile $file, array $requiredHeaders, int $maximumRows = 2000, array $headerAliases = []): array
     {
         $csv = new SplFileObject($file->getRealPath(), 'r');
         $csv->setFlags(SplFileObject::READ_CSV | SplFileObject::SKIP_EMPTY | SplFileObject::DROP_NEW_LINE);
         $csv->setCsvControl(',', '"', '');
 
-        $rawHeaders = $csv->fgetcsv();
+        $rawHeaders = null;
+        $headerIndex = null;
+
+        while (! $csv->eof()) {
+            $candidate = $csv->fgetcsv();
+
+            if (is_array($candidate) && ! collect($candidate)->every(fn ($value): bool => blank($value))) {
+                $rawHeaders = $candidate;
+                $headerIndex = $csv->key();
+
+                break;
+            }
+        }
 
         if (! is_array($rawHeaders)) {
             throw ValidationException::withMessages(['csv_file' => 'The CSV file does not contain a header row.']);
         }
 
+        $aliases = collect($headerAliases)
+            ->mapWithKeys(fn (string $target, string $source): array => [$this->normalizeHeader($source) => $target]);
         $headers = collect($rawHeaders)
-            ->map(fn ($header): string => str($header)->replaceStart("\xEF\xBB\xBF", '')->trim()->lower()->toString())
+            ->map(fn ($header): string => $this->normalizeHeader((string) $header))
+            ->map(fn (string $header): string => $aliases->get($header, $header))
             ->all();
         $missingHeaders = array_values(array_diff($requiredHeaders, $headers));
 
@@ -41,7 +56,7 @@ class CsvFileReader
         $rows = [];
 
         foreach ($csv as $index => $values) {
-            if ($index === 0) {
+            if ($headerIndex !== null && $index <= $headerIndex) {
                 continue;
             }
 
@@ -75,5 +90,16 @@ class CsvFileReader
         }
 
         return $rows;
+    }
+
+    private function normalizeHeader(string $header): string
+    {
+        return str($header)
+            ->replaceStart("\xEF\xBB\xBF", '')
+            ->trim()
+            ->lower()
+            ->replaceMatches('/[^a-z0-9]+/', '_')
+            ->trim('_')
+            ->toString();
     }
 }

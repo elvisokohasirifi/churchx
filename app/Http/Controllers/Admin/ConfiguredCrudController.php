@@ -138,8 +138,15 @@ class ConfiguredCrudController extends CrudController
             CRUD::addButtonFromView('top', 'bulk_create', 'setup_bulk_create', 'beginning');
         }
 
+        $modelClass = $this->definition['model'];
+        $modelCasts = (new $modelClass)->getCasts();
+
         foreach ($this->definition['fields'] as $field) {
             $column = CRUD::column($field)->label($this->fieldLabel($field));
+            $cast = $modelCasts[$field] ?? null;
+            if (is_string($cast) && enum_exists($cast)) {
+                $column->type('enum');
+            }
             if ($field === 'auditable_id' && $this->definition['model'] === AuditLog::class) {
                 CRUD::addClause('with', 'auditable');
                 $column->value(fn (AuditLog $auditLog): ?string => $auditLog->auditable
