@@ -116,9 +116,11 @@ it('combines attendance from every branch led by the same leader', function () {
         AttendanceSummary::factory()->create([
             'service_id' => $service->id,
             'branch_id' => $branch->id,
-            'total_male' => 10,
-            'total_female' => 15,
-            'total_children' => 5,
+            'total_male' => 0,
+            'total_female' => 0,
+            'total_children' => 0,
+            'total_members' => 25,
+            'total_visitors' => 5,
         ]);
     }
 
@@ -128,6 +130,30 @@ it('combines attendance from every branch led by the same leader', function () {
     expect($response->viewData('rows'))->toHaveCount(1)
         ->and($response->viewData('rows')->first()['services'])->toBe(2)
         ->and($response->viewData('rows')->first()['total'])->toBe(60.0);
+});
+
+it('ranks churches using member and visitor attendance totals', function () {
+    $branch = Branch::factory()->create(['name' => 'Register Branch']);
+    $administrator = User::factory()->create();
+    assignRole($administrator, 'App Administrator');
+    $service = Service::factory()->create(['branch_id' => $branch->id, 'date' => '2026-09-20']);
+    AttendanceSummary::factory()->create([
+        'service_id' => $service->id,
+        'branch_id' => $branch->id,
+        'total_male' => 0,
+        'total_female' => 0,
+        'total_children' => 0,
+        'total_members' => 32,
+        'total_visitors' => 5,
+    ]);
+
+    $response = $this->actingAs($administrator, 'backpack')->get(route('admin.reports.attendance-churches'));
+
+    $response->assertOk()->assertSee('Register Branch');
+    expect($response->viewData('rows'))->toHaveCount(1)
+        ->and($response->viewData('rows')->first()['services'])->toBe(1)
+        ->and($response->viewData('rows')->first()['attendance'])->toBe(37)
+        ->and($response->viewData('rows')->first()['average'])->toBe(37.0);
 });
 
 it('groups completed income by service and excludes cancelled income', function () {

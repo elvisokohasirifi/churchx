@@ -10,6 +10,6 @@ class AttendanceSummary extends UuidModel
 
     public function getTotalAttendanceAttribute(): int
     {
-        return $this->total_male + $this->total_female + $this->total_children;
+        return $this->total_members + $this->total_visitors;
     }
 }

@@ -175,7 +175,7 @@ class OperationalReportService
             ->whereBetween('services.date', [$from->toDateString(), $to->toDateString()])
             ->select('attendance_summaries.branch_id')
             ->selectRaw('count(distinct attendance_summaries.service_id) as services_count')
-            ->selectRaw('sum(total_male + total_female + total_children) as attendance_total')
+            ->selectRaw('sum(total_members + total_visitors) as attendance_total')
             ->groupBy('attendance_summaries.branch_id')
             ->get()
             ->keyBy('branch_id');
